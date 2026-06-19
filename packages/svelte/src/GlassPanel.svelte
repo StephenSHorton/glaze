@@ -10,6 +10,8 @@
     radius?: number;
     /** Frost amount (0 = perfectly clear, see-through glass). */
     blur?: number;
+    /** Backdrop blur — a clean depth-of-field blur of the wallpaper (no frosting). */
+    bgBlur?: number;
     /** Edge bend strength. */
     refraction?: number;
     /** Chromatic split at the rim. */
@@ -32,6 +34,7 @@
     class: className = "",
     radius,
     blur = 0,
+    bgBlur = 0,
     refraction = 0.05,
     dispersion = 0.006,
     rim = 0.05,
@@ -95,6 +98,7 @@
       size: [p.width / w, p.height / h],
       radius: radius ?? resolvedRadius,
       blur: blur * 0.001,
+      bgBlur: bgBlur * 0.001,
       refraction,
       dispersion,
       rim,
@@ -131,6 +135,7 @@
         size: [1, 1],
         radius: resolvedRadius,
         blur: blur * 0.001,
+        bgBlur: bgBlur * 0.001,
         refraction,
         dispersion,
         rim,

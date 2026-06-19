@@ -1,5 +1,6 @@
 <script lang="ts">
   import { hasWebGPU } from "@glaze/core";
+  import Showcase from "./Showcase.svelte";
   import Glass from "./Glass.svelte";
 
   let showBanner = $state(!hasWebGPU());
@@ -7,6 +8,7 @@
 
 <header class="topnav">
   <span class="brand">Glaze</span>
+  <span class="spacer"></span>
   <a class="gh" href="https://github.com/StephenSHorton/glaze" target="_blank" rel="noopener noreferrer">
     GitHub ↗
   </a>
@@ -23,6 +25,7 @@
 {/if}
 
 <Glass />
+<Showcase />
 
 <style>
   :global(body) {
@@ -36,7 +39,7 @@
   .topnav {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 1rem;
     max-width: 1100px;
     margin: 0 auto;
     padding: 1rem 1.25rem 0.25rem;
@@ -44,6 +47,9 @@
   .brand {
     font-weight: 700;
     letter-spacing: 0.04em;
+  }
+  .spacer {
+    flex: 1;
   }
   .gh {
     color: #c9cde0;

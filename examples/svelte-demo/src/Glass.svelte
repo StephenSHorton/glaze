@@ -1,5 +1,6 @@
 <script lang="ts">
   import { GlassScene, GlassPanel } from "@glaze/svelte";
+  import ControlPanel from "./ControlPanel.svelte";
 
   // Base-aware asset URL so the grass loads under GitHub Pages' /glaze/ subpath.
   const assetBase = import.meta.env.BASE_URL;
@@ -36,8 +37,9 @@
   }
 </script>
 
-<GlassScene class="stage">
-  <div class="bg" style="background-image: url('{assetBase}grass.jpg');"></div>
+<section class="pg-section">
+  <GlassScene class="stage">
+    <div class="bg" style="background-image: url('{assetBase}grass.jpg');"></div>
   <h1 class="headline">read me through the glass</h1>
   <p class="hint">
     Everything here is normal DOM. Drag the card over the headline — and tune the
@@ -46,7 +48,7 @@
 
   <div class="dock">
     <GlassPanel
-      class="card"
+      class="pg-card"
       radius={p.radius}
       blur={p.blur}
       refraction={p.refraction}
@@ -73,26 +75,27 @@
       <a href="#forecast">7-day forecast →</a>
     </GlassPanel>
   </div>
-</GlassScene>
+  </GlassScene>
 
-<aside class="controls">
-  <div class="controls-head">
-    <strong>Glass</strong>
-    <button onclick={reset}>Reset</button>
+  <div class="rail">
+    <ControlPanel bind:values={p} bind:color {controls} onReset={reset} />
   </div>
-  <label class="color-row">
-    <span>Color<b>{color}</b></span>
-    <input type="color" bind:value={color} />
-  </label>
-  {#each controls as c}
-    <label>
-      <span>{c.label}<b>{p[c.key]}</b></span>
-      <input type="range" min={c.min} max={c.max} step={c.step} bind:value={p[c.key]} />
-    </label>
-  {/each}
-</aside>
+</section>
 
 <style>
+  .pg-section {
+    position: relative;
+  }
+  /* Right-hand rail that holds the sticky control panel for this section only. */
+  .rail {
+    position: absolute;
+    top: 0;
+    right: 16px;
+    bottom: 0;
+    width: 220px;
+    pointer-events: none;
+  }
+
   :global(.stage) {
     max-width: 1100px;
     margin: 1rem auto 4rem;
@@ -148,7 +151,7 @@
 
   /* Glass card. border-radius is driven by the GlassPanel (inline) from the
      slider; overflow:hidden clips the canvas to that radius. */
-  :global(.card) {
+  :global(.pg-card) {
     width: 340px;
     padding: 1.4rem 1.5rem 1.2rem;
     overflow: hidden;
@@ -158,32 +161,32 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.4);
     text-shadow: 0 1px 10px rgba(0, 0, 0, 0.55);
   }
-  :global(.card header) {
+  :global(.pg-card header) {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
   }
-  :global(.card .place) {
+  :global(.pg-card .place) {
     margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
   }
-  :global(.card .cond) {
+  :global(.pg-card .cond) {
     margin: 0.15rem 0 0;
     opacity: 0.95;
     font-size: 0.9rem;
   }
-  :global(.card .temp) {
+  :global(.pg-card .temp) {
     margin: 0;
     font-size: 2.6rem;
     font-weight: 300;
     line-height: 1;
   }
-  :global(.card input[type="range"]) {
+  :global(.pg-card input[type="range"]) {
     width: 100%;
     margin: 1rem 0 0;
   }
-  :global(.card ul) {
+  :global(.pg-card ul) {
     list-style: none;
     display: flex;
     justify-content: space-between;
@@ -192,73 +195,17 @@
     padding: 0.9rem 0 0;
     border-top: 1px solid rgba(255, 255, 255, 0.25);
   }
-  :global(.card li) {
+  :global(.pg-card li) {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.4rem;
     font-size: 0.85rem;
   }
-  :global(.card a) {
+  :global(.pg-card a) {
     display: inline-block;
     margin-top: 1rem;
     color: #fff;
     font-size: 0.9rem;
-  }
-
-  /* Live controls — normal DOM, outside the scene (not captured). */
-  .controls {
-    position: fixed;
-    top: 64px;
-    right: 16px;
-    width: 220px;
-    padding: 0.9rem 1rem 1.1rem;
-    background: rgba(10, 13, 24, 0.92);
-    border: 1px solid #1d2236;
-    border-radius: 14px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-    z-index: 10;
-    font-size: 0.82rem;
-  }
-  .controls-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.6rem;
-  }
-  .controls-head button {
-    background: #161b2e;
-    color: #c9cde0;
-    border: 1px solid #2a3050;
-    border-radius: 8px;
-    padding: 0.2rem 0.6rem;
-    font: inherit;
-    cursor: pointer;
-  }
-  .controls label {
-    display: block;
-    margin-top: 0.7rem;
-  }
-  .controls label span {
-    display: flex;
-    justify-content: space-between;
-    color: #c9cde0;
-    margin-bottom: 0.2rem;
-  }
-  .controls label b {
-    color: #fff;
-    font-variant-numeric: tabular-nums;
-  }
-  .controls input[type="range"] {
-    width: 100%;
-  }
-  .color-row input[type="color"] {
-    width: 100%;
-    height: 28px;
-    padding: 0;
-    border: 1px solid #2a3050;
-    border-radius: 8px;
-    background: transparent;
-    cursor: pointer;
   }
 </style>

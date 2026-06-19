@@ -29,19 +29,14 @@ export const GLAZE_GLASS = /* wgsl */ `
 @uniform tintAmount: f32;
 @uniform specular: f32;
 @uniform hover: f32;
+@uniform bgBlur: f32;
 
-// Powdered/matte frost: a clean CSS-style Gaussian blur of the backdrop plus a
-// soft matte veil that BUILDS toward a fully solid, opaque panel as the amount
-// rises — like dusting more and more frosting on until you can't see through.
-fn frost(uv: vec2f, amount: f32) -> vec3f {
-  let f = clamp(amount / 0.02, 0.0, 1.0); // 0..1 over the slider range
-  if (f <= 0.001) { return textureSample(backdrop, backdrop_smp, uv).rgb; }
-  let scale = max(globals.resolution.y, 1.0);
-
-  // Smooth Gaussian blur via a golden-angle disc — no axis-aligned cross
-  // pattern, the way a CSS blur() looks. k circularizes the kernel for the
-  // backdrop's aspect (the panel covers size-fraction of the wider scene).
-  let radius = 0.002 + f * 0.007;
+// Clean CSS-blur-style Gaussian of the backdrop via a golden-angle disc — no
+// axis-aligned cross pattern. radius is in backdrop-UV units. k circularizes
+// the kernel for the backdrop's aspect (panel covers a size-fraction of the
+// wider scene).
+fn glaze_glass_blur(uv: vec2f, radius: f32) -> vec3f {
+  if (radius <= 0.0006) { return textureSample(backdrop, backdrop_smp, uv).rgb; }
   let k = (globals.resolution.y / max(globals.resolution.x, 1.0)) * (u.size.x / max(u.size.y, 1e-4));
   var col = textureSample(backdrop, backdrop_smp, uv).rgb;
   var wsum = 1.0;
@@ -55,10 +50,22 @@ fn frost(uv: vec2f, amount: f32) -> vec3f {
     col += textureSample(backdrop, backdrop_smp, uv + off).rgb * w;
     wsum += w;
   }
-  col = col / wsum;
+  return col / wsum;
+}
+
+// Powdered/matte frost over a (optionally pre-blurred) backdrop. bgBlur is a
+// clean depth-of-field blur of the wallpaper; amount (frost) adds a soft matte
+// veil that BUILDS toward a fully solid, opaque panel — like dusting on more and
+// more frosting until you can't see through.
+fn frost(uv: vec2f, amount: f32, bgBlur: f32) -> vec3f {
+  let f = clamp(amount / 0.02, 0.0, 1.0); // 0..1 over the slider range
+  let radius = bgBlur + f * 0.009;
+  var col = glaze_glass_blur(uv, radius);
+  if (f <= 0.001) { return col; }
 
   // Powder veil — soft cloud + fine grain, mixed in proportional to amount, so
   // f = 1 is fully solid matte (the backdrop is completely hidden).
+  let scale = max(globals.resolution.y, 1.0);
   let cloud = glaze_fbm(uv * scale * 0.14);
   let grain = glaze_hash21(floor(uv * globals.resolution / 2.0)) - 0.5;
   let powder = u.color * (0.95 + 0.05 * cloud) + grain * 0.025;
@@ -90,11 +97,12 @@ fn paint(uv: vec2f) -> vec4f {
   let refrUV = baseUV + n * edge * u.refraction * u.size;
   let ca = u.dispersion * edge * length(u.size);
 
-  // Fade the rim's chromatic refraction as powder builds, so full frost is
-  // genuinely solid (no see-through grass at the edge).
+  // Fade the rim's (sharp) chromatic refraction as powder builds OR the backdrop
+  // blurs, so neither full frost nor a blurred wallpaper shows a crisp edge.
   let frostF = clamp(u.blur / 0.02, 0.0, 1.0);
-  let caEdge = edge * (1.0 - frostF);
-  var col = frost(refrUV, u.blur);
+  let blurF = clamp(u.bgBlur / 0.02, 0.0, 1.0);
+  let caEdge = edge * (1.0 - frostF) * (1.0 - blurF);
+  var col = frost(refrUV, u.blur, u.bgBlur);
   col.r = mix(col.r, textureSample(backdrop, backdrop_smp, refrUV + n * ca).r, caEdge);
   col.b = mix(col.b, textureSample(backdrop, backdrop_smp, refrUV - n * ca).b, caEdge);
 
@@ -107,7 +115,8 @@ fn paint(uv: vec2f) -> vec4f {
   let rimHi = smoothstep(0.010, 0.0, abs(d));
   let lit = clamp(0.5 - 0.55 * n.y - 0.2 * n.x, 0.0, 1.0);
   let sheen = smoothstep(0.62, 0.0, uv.y);
-  let glint = smoothstep(0.22, 0.0, distance(uv, globals.mouse)) * u.hover;
+  // Aspect-correct the pointer distance so the glint stays circular on wide panels.
+  let glint = smoothstep(0.22, 0.0, length((uv - globals.mouse) * vec2f(aspect, 1.0))) * u.hover;
 
   col += vec3f(1.0) * rimHi * (0.10 + 0.30 * lit) * u.specular;
   col += vec3f(1.0) * sheen * 0.05 * edge * u.specular;
