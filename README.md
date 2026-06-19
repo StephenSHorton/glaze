@@ -2,6 +2,8 @@
 
 **Shaders as a reactive, accessible-by-default paint primitive for the web.**
 
+**[▶ Live demo](https://stephenshorton.github.io/glaze/)** — drag the glass card and tune it live. Best in Chrome/Edge or Safari 26+ (WebGPU); falls back to CSS glass elsewhere.
+
 Glaze lets you paint a WGSL shader *behind* any real DOM element — a hero background, a button glow, a nav — while the element's text, links, focus, and accessibility stay 100% real DOM. The GPU is strictly the **paint layer** for elements you opt in; the browser keeps doing everything it's good at (text shaping, IME, selection, find-in-page, SEO, layout, native scrolling).
 
 > `<style>` is CPU paint. `<shader>` is GPU paint.
