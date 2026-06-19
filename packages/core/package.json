@@ -1,0 +1,30 @@
+{
+  "name": "@glaze/core",
+  "version": "0.0.1",
+  "description": "Framework-agnostic engine for Glaze: a per-element WebGPU canvas that paints a WGSL shader behind real DOM, with reactive uniforms, accessible-by-default behavior, and a mandatory fallback.",
+  "type": "module",
+  "license": "MIT",
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.52",
+    "html2canvas": "^1.4.1",
+    "typescript": "^5.6.3"
+  },
+  "optionalDependencies": {
+    "html2canvas": "^1.4.1"
+  },
+  "sideEffects": false
+}

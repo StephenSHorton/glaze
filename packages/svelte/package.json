@@ -1,0 +1,31 @@
+{
+  "name": "@glaze/svelte",
+  "version": "0.0.1",
+  "description": "Svelte binding for Glaze: <GlassScene>/<GlassPanel> components and a use:shader action for refractive WGSL glass UI.",
+  "type": "module",
+  "license": "MIT",
+  "files": ["src"],
+  "types": "./src/index.ts",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "echo \"@glaze/svelte ships source; consumers compile it via the svelte export condition\"",
+    "typecheck": "echo \"typecheck via svelte-check (not configured in v1)\""
+  },
+  "dependencies": {
+    "@glaze/core": "0.0.1"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "sideEffects": false
+}
