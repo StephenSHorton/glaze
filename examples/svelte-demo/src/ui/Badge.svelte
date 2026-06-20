@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { GlassPanel } from "@glaze/svelte";
+  import { GlassPanel } from "@kussetsu/svelte";
   import type { Snippet } from "svelte";
   import { glassTheme } from "./theme";
 

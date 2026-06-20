@@ -1,18 +1,18 @@
-# Glaze
+# Kussetsu
 
 **Liquid glass UI for the web — write normal DOM, get GPU-rendered glass for free.**
 
-**[▶ Live demo](https://stephenshorton.github.io/glaze/)** · MIT licensed · WebGPU (Chrome/Edge, Safari 26+), with a CSS-glass fallback everywhere else.
+**[▶ Live demo](https://stephenshorton.github.io/kussetsu/)** · MIT licensed · WebGPU (Chrome/Edge, Safari 26+), with a CSS-glass fallback everywhere else.
 
-![Glaze — liquid glass UI for the web](examples/svelte-demo/public/og-image.jpg)
+![Kussetsu — liquid glass UI for the web](examples/svelte-demo/public/og-image.jpg)
 
-Glaze renders refractive "liquid glass" on the GPU while your text, links, inputs, focus, and accessibility stay **100% real DOM**. You write an ordinary component; Glaze snapshots whatever's behind your glass panel, refracts it with a WGSL shader, and renders your panel's content crisp on top — no textures, uniforms, capture, or render-loop code.
+Kussetsu renders refractive "liquid glass" on the GPU while your text, links, inputs, focus, and accessibility stay **100% real DOM**. You write an ordinary component; Kussetsu snapshots whatever's behind your glass panel, refracts it with a WGSL shader, and renders your panel's content crisp on top — no textures, uniforms, capture, or render-loop code.
 
 ## Quick start
 
 ```svelte
 <script>
-  import { GlassScene, GlassPanel } from "@glaze/svelte";
+  import { GlassScene, GlassPanel } from "@kussetsu/svelte";
   let temp = $state(64);
 </script>
 
@@ -48,20 +48,20 @@ flowchart TD
 ```
 
 1. **`<GlassScene>`** wraps your backdrop — ordinary DOM you already write.
-2. Glaze snapshots that subtree into a **GPU texture** (`captureBackdrop()` — the native HTML-in-Canvas API where available, [html2canvas](https://github.com/niklasvh/html2canvas) otherwise).
+2. Kussetsu snapshots that subtree into a **GPU texture** (`captureBackdrop()` — the native HTML-in-Canvas API where available, [html2canvas](https://github.com/niklasvh/html2canvas) otherwise).
 3. **`<GlassPanel>`** mounts a per-element WebGPU canvas behind its content and runs a **WGSL glass shader** that refracts the texture (edge lensing, chromatic dispersion, frost, tint, specular highlights).
 4. Your **panel content** stays real, selectable, interactive DOM on top. Panels are excluded from the capture, so the glass can never photograph itself (no feedback loop).
 
 ## Why not just render the whole UI on the GPU?
 
-Because the moment you paint your UI to a canvas, you opt out of 20 years of browser platform work all at once — text shaping, accessibility (pixels are invisible to screen readers), IME, selection, find-in-page, autofill, links, SEO, native scrolling. Glaze keeps the **DOM authoritative** and uses the GPU strictly as an opt-in *paint* layer. Text and accessibility aren't "solved" — they're never removed. (Even Figma, Google Docs and Miro, who built the full bespoke GPU stack, are walking it back toward this hybrid.)
+Because the moment you paint your UI to a canvas, you opt out of 20 years of browser platform work all at once — text shaping, accessibility (pixels are invisible to screen readers), IME, selection, find-in-page, autofill, links, SEO, native scrolling. Kussetsu keeps the **DOM authoritative** and uses the GPU strictly as an opt-in *paint* layer. Text and accessibility aren't "solved" — they're never removed. (Even Figma, Google Docs and Miro, who built the full bespoke GPU stack, are walking it back toward this hybrid.)
 
 ## Packages
 
 | Package | What it is |
 | --- | --- |
-| [`@glaze/core`](packages/core) | Framework-agnostic engine: per-element WebGPU canvas, WGSL `paint(uv)` shaders, reactive uniforms, `@texture` support, backdrop capture, and a mandatory CSS fallback. |
-| [`@glaze/svelte`](packages/svelte) | `<GlassScene>` / `<GlassPanel>` components, plus a low-level `use:shader` action. |
+| [`@kussetsu/core`](packages/core) | Framework-agnostic engine: per-element WebGPU canvas, WGSL `paint(uv)` shaders, reactive uniforms, `@texture` support, backdrop capture, and a mandatory CSS fallback. |
+| [`@kussetsu/svelte`](packages/svelte) | `<GlassScene>` / `<GlassPanel>` components, plus a low-level `use:shader` action. |
 
 React/Vue/vanilla bindings are thin additions on top of the framework-agnostic core — not rewrites.
 
@@ -87,7 +87,7 @@ Every `<GlassPanel>` prop is reactive and optional — bind them to state or a c
 
 ```svelte
 <script>
-  import { shader } from "@glaze/svelte";
+  import { shader } from "@kussetsu/svelte";
   let intensity = $state(0.6);
 </script>
 
@@ -95,7 +95,7 @@ Every `<GlassPanel>` prop is reactive and optional — bind them to state or a c
   wgsl: `
     @uniform intensity: f32;
     fn paint(uv: vec2f) -> vec4f {
-      let n = glaze_fbm(uv * 4.0 + globals.time * 0.1);
+      let n = kussetsu_fbm(uv * 4.0 + globals.time * 0.1);
       return vec4f(vec3f(0.3, 0.5, 0.9) * n * u.intensity, 1.0);
     }`,
   uniforms: { intensity },
@@ -117,7 +117,7 @@ Built-ins available in every shader: `globals.{time,mouse,resolution,scroll,dpr}
 
 ```bash
 npm install
-npm run build       # build @glaze/core
+npm run build       # build @kussetsu/core
 npm run dev:demo    # http://localhost:5273
 ```
 

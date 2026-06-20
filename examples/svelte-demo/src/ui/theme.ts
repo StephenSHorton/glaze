@@ -1,6 +1,6 @@
 import { getContext } from "svelte";
 
-export const GLASS_THEME_KEY = Symbol("glaze-glass-theme");
+export const GLASS_THEME_KEY = Symbol("kussetsu-glass-theme");
 
 /**
  * Shared glass props from the control panel. Components spread these, then

@@ -1,7 +1,7 @@
 {
-  "name": "@kussetsu/core",
+  "name": "@kussetsu/react",
   "version": "0.1.0",
-  "description": "Framework-agnostic engine for Kussetsu: a per-element WebGPU canvas that paints a WGSL shader behind real DOM, with reactive uniforms, accessible-by-default behavior, and a mandatory fallback.",
+  "description": "React binding for Kussetsu: <GlassScene>/<GlassPanel> components and a useShader hook for refractive WGSL glass UI.",
   "type": "module",
   "license": "MIT",
   "author": "Stephen Horton",
@@ -9,17 +9,17 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/StephenSHorton/kussetsu.git",
-    "directory": "packages/core"
+    "directory": "packages/react"
   },
   "bugs": "https://github.com/StephenSHorton/kussetsu/issues",
   "keywords": [
+    "react",
     "webgpu",
     "wgsl",
     "shader",
     "glass",
     "glassmorphism",
-    "ui",
-    "canvas"
+    "ui"
   ],
   "files": [
     "dist"
@@ -41,13 +41,19 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build"
   },
-  "devDependencies": {
-    "@webgpu/types": "^0.1.52",
-    "html2canvas": "^1.4.1",
-    "typescript": "^5.6.3"
+  "dependencies": {
+    "@kussetsu/core": "0.1.0"
   },
-  "optionalDependencies": {
-    "html2canvas": "^1.4.1"
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.6.3"
   },
   "sideEffects": false
 }

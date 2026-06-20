@@ -1,4 +1,4 @@
-import { GLAZE_PRELUDE } from "./prelude.js";
+import { KUSSETSU_PRELUDE } from "./prelude.js";
 import type { WgslType } from "./layout.js";
 
 export interface TextureBinding {
@@ -54,7 +54,7 @@ export function assembleShader(userWgsl: string): ParsedShader {
     const type = normalizeType(rawType);
     if (!type) {
       throw new Error(
-        `[glaze] uniform "${name}" has unsupported type "${rawType}". ` +
+        `[kussetsu] uniform "${name}" has unsupported type "${rawType}". ` +
           `Supported in v1: f32, vec2f, vec3f, vec4f.`,
       );
     }
@@ -73,16 +73,16 @@ export function assembleShader(userWgsl: string): ParsedShader {
 
   if (!/\bfn\s+paint\s*\(/.test(stripped)) {
     throw new Error(
-      `[glaze] shader is missing its entry point. Define ` +
+      `[kussetsu] shader is missing its entry point. Define ` +
         `\`fn paint(uv: vec2f) -> vec4f\` in your WGSL.`,
     );
   }
 
   const userStruct =
     decls.length > 0
-      ? `struct GlazeUser {\n` +
+      ? `struct KussetsuUser {\n` +
         decls.map((d) => `  ${d.name}: ${d.type},`).join("\n") +
-        `\n};\n@group(0) @binding(1) var<uniform> u: GlazeUser;\n`
+        `\n};\n@group(0) @binding(1) var<uniform> u: KussetsuUser;\n`
       : "";
 
   const textureDecls = textures
@@ -94,7 +94,7 @@ export function assembleShader(userWgsl: string): ParsedShader {
     .join("");
 
   const module = /* wgsl */ `
-struct GlazeGlobals {
+struct KussetsuGlobals {
   resolution: vec2f,
   mouse: vec2f,
   time: f32,
@@ -102,22 +102,22 @@ struct GlazeGlobals {
   dpr: f32,
   _pad0: f32,
 };
-@group(0) @binding(0) var<uniform> globals: GlazeGlobals;
-${userStruct}${textureDecls}${GLAZE_PRELUDE}
+@group(0) @binding(0) var<uniform> globals: KussetsuGlobals;
+${userStruct}${textureDecls}${KUSSETSU_PRELUDE}
 
 ${stripped}
 
-struct GlazeVsOut {
+struct KussetsuVsOut {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
 };
 
 @vertex
-fn glaze_vs(@builtin(vertex_index) vi: u32) -> GlazeVsOut {
+fn kussetsu_vs(@builtin(vertex_index) vi: u32) -> KussetsuVsOut {
   // One oversized triangle covering the viewport.
   var pts = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
   let xy = pts[vi];
-  var out: GlazeVsOut;
+  var out: KussetsuVsOut;
   out.position = vec4f(xy, 0.0, 1.0);
   // uv origin at top-left, matching screen/DOM convention.
   out.uv = vec2f(xy.x * 0.5 + 0.5, 1.0 - (xy.y * 0.5 + 0.5));
@@ -125,7 +125,7 @@ fn glaze_vs(@builtin(vertex_index) vi: u32) -> GlazeVsOut {
 }
 
 @fragment
-fn glaze_fs(in: GlazeVsOut) -> @location(0) vec4f {
+fn kussetsu_fs(in: KussetsuVsOut) -> @location(0) vec4f {
   return paint(in.uv);
 }
 `;

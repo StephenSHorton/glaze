@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { GlassScene, GlassPanel } from "@glaze/svelte";
+  import { GlassScene, GlassPanel } from "@kussetsu/svelte";
   import ControlPanel from "./ControlPanel.svelte";
 
-  // Base-aware asset URL so the grass loads under GitHub Pages' /glaze/ subpath.
+  // Base-aware asset URL so the grass loads under GitHub Pages' /kussetsu/ subpath.
   const assetBase = import.meta.env.BASE_URL;
 
   let temp = $state(64);

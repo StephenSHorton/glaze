@@ -16,7 +16,7 @@
  *   specular     — highlight intensity (rim/sweep/sheen/glint)
  *   hover        — 0..1 pointer presence (drives the glint)
  */
-export const GLAZE_GLASS = /* wgsl */ `
+export const KUSSETSU_GLASS = /* wgsl */ `
 @texture backdrop;
 @uniform origin: vec2f;
 @uniform size: vec2f;
@@ -35,7 +35,7 @@ export const GLAZE_GLASS = /* wgsl */ `
 // axis-aligned cross pattern. radius is in backdrop-UV units. k circularizes
 // the kernel for the backdrop's aspect (panel covers a size-fraction of the
 // wider scene).
-fn glaze_glass_blur(uv: vec2f, radius: f32) -> vec3f {
+fn kussetsu_glass_blur(uv: vec2f, radius: f32) -> vec3f {
   if (radius <= 0.0006) { return textureSample(backdrop, backdrop_smp, uv).rgb; }
   let k = (globals.resolution.y / max(globals.resolution.x, 1.0)) * (u.size.x / max(u.size.y, 1e-4));
   var col = textureSample(backdrop, backdrop_smp, uv).rgb;
@@ -60,14 +60,14 @@ fn glaze_glass_blur(uv: vec2f, radius: f32) -> vec3f {
 fn frost(uv: vec2f, amount: f32, bgBlur: f32) -> vec3f {
   let f = clamp(amount / 0.02, 0.0, 1.0); // 0..1 over the slider range
   let radius = bgBlur + f * 0.009;
-  var col = glaze_glass_blur(uv, radius);
+  var col = kussetsu_glass_blur(uv, radius);
   if (f <= 0.001) { return col; }
 
   // Powder veil — soft cloud + fine grain, mixed in proportional to amount, so
   // f = 1 is fully solid matte (the backdrop is completely hidden).
   let scale = max(globals.resolution.y, 1.0);
-  let cloud = glaze_fbm(uv * scale * 0.14);
-  let grain = glaze_hash21(floor(uv * globals.resolution / 2.0)) - 0.5;
+  let cloud = kussetsu_fbm(uv * scale * 0.14);
+  let grain = kussetsu_hash21(floor(uv * globals.resolution / 2.0)) - 0.5;
   let powder = u.color * (0.95 + 0.05 * cloud) + grain * 0.025;
   col = mix(col, powder, f);
 
@@ -82,12 +82,12 @@ fn paint(uv: vec2f) -> vec4f {
   let p = (uv - vec2f(0.5)) * vec2f(aspect, 1.0);
   let halfb = vec2f(0.5 * aspect, 0.5) - vec2f(0.004);
   let rr = clamp(u.radius / max(res.y, 1.0), 0.02, 0.5);
-  let d = glaze_sd_round_box(p, halfb, rr);
+  let d = kussetsu_sd_round_box(p, halfb, rr);
 
   // SDF gradient ~ glass surface normal.
   let e = 0.0022;
-  let gx = glaze_sd_round_box(p + vec2f(e, 0.0), halfb, rr) - glaze_sd_round_box(p - vec2f(e, 0.0), halfb, rr);
-  let gy = glaze_sd_round_box(p + vec2f(0.0, e), halfb, rr) - glaze_sd_round_box(p - vec2f(0.0, e), halfb, rr);
+  let gx = kussetsu_sd_round_box(p + vec2f(e, 0.0), halfb, rr) - kussetsu_sd_round_box(p - vec2f(e, 0.0), halfb, rr);
+  let gy = kussetsu_sd_round_box(p + vec2f(0.0, e), halfb, rr) - kussetsu_sd_round_box(p - vec2f(0.0, e), halfb, rr);
   var n = vec2f(gx, gy);
   n = n / max(length(n), 1e-4);
 

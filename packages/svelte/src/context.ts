@@ -1,4 +1,4 @@
-export const GLASS_SCENE_KEY = Symbol("glaze-scene");
+export const GLASS_SCENE_KEY = Symbol("kussetsu-scene");
 
 /** Shared by <GlassScene> to its <GlassPanel> descendants. */
 export interface GlassSceneContext {

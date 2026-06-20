@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getContext, onDestroy, type Snippet } from "svelte";
-  import { createShaderSurface, GLAZE_GLASS, type ShaderSurface, type Uniforms } from "@glaze/core";
+  import { createShaderSurface, KUSSETSU_GLASS, type ShaderSurface, type Uniforms } from "@kussetsu/core";
   import { GLASS_SCENE_KEY, type GlassSceneContext } from "./context";
 
   interface Props {
@@ -128,7 +128,7 @@
 
     resolvedRadius = radius ?? (parseFloat(getComputedStyle(panelEl).borderTopLeftRadius) || 24);
     surface = createShaderSurface(panelEl, {
-      wgsl: GLAZE_GLASS,
+      wgsl: KUSSETSU_GLASS,
       textures: { backdrop },
       uniforms: {
         origin: [0, 0],
@@ -174,7 +174,7 @@
 <div
   bind:this={panelEl}
   class={className}
-  data-glaze-panel
+  data-kussetsu-panel
   style="position: relative; isolation: isolate; transform: translate({x}px, {y}px); {radius != null ? `border-radius: ${radius}px;` : ''} {drag ? 'cursor: grab; touch-action: none;' : ''}"
   {onpointerdown}
   {onpointermove}

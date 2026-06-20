@@ -1,5 +1,5 @@
 /**
- * Shared WebGPU device acquisition. All Glaze surfaces on a page share one
+ * Shared WebGPU device acquisition. All Kussetsu surfaces on a page share one
  * GPUDevice — adapters/devices are expensive and there is no reason to hold
  * more than one for a handful of decorative surfaces.
  */

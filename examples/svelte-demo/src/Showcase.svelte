@@ -1,6 +1,6 @@
 <script lang="ts">
   import { setContext } from "svelte";
-  import { GlassScene, GlassPanel } from "@glaze/svelte";
+  import { GlassScene, GlassPanel } from "@kussetsu/svelte";
   import { GLASS_THEME_KEY } from "./ui/theme";
   import ControlPanel from "./ControlPanel.svelte";
   import Button from "./ui/Button.svelte";
@@ -60,11 +60,11 @@
   <GlassScene class="ds-stage">
     <div class="ds-bg" style="background-image: url('{assetBase}grass.jpg'); filter: blur({p.bgBlur}px);"></div>
 
-  <!-- data-glaze-no-capture: labels/hero stay crisp on top, only .ds-bg refracts -->
-  <div class="ds-content" data-glaze-no-capture>
+  <!-- data-kussetsu-no-capture: labels/hero stay crisp on top, only .ds-bg refracts -->
+  <div class="ds-content" data-kussetsu-no-capture>
     <GlassPanel {...themeProps()} class="ds-nav">
       <div class="nav">
-        <span class="brand">◆ Glaze UI</span>
+        <span class="brand">◆ Kussetsu UI</span>
         <nav class="links">
           <a href="#components">Components</a>
           <a href="#docs">Docs</a>

@@ -15,4 +15,4 @@ export type {
   UniformValue,
   Fallback,
   FallbackReason,
-} from "@glaze/core";
+} from "@kussetsu/core";

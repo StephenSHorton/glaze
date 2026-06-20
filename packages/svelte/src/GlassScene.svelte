@@ -1,6 +1,6 @@
 <script lang="ts">
   import { setContext, onMount, type Snippet } from "svelte";
-  import { captureBackdrop } from "@glaze/core";
+  import { captureBackdrop } from "@kussetsu/core";
   import { GLASS_SCENE_KEY, type GlassSceneContext } from "./context";
 
   interface Props {
@@ -38,7 +38,7 @@
       const { source } = await captureBackdrop(sceneEl, { maxDpr });
       backdrop = source;
     } catch (err) {
-      console.warn("[glaze] backdrop capture failed; panels fall back to CSS glass:", err);
+      console.warn("[kussetsu] backdrop capture failed; panels fall back to CSS glass:", err);
       failed = true;
     }
   });

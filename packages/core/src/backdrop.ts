@@ -26,8 +26,8 @@ export interface CaptureOptions {
   readonly maxDpr?: number;
   /**
    * Return true to EXCLUDE an element from the snapshot. Defaults to excluding
-   * the glass panels themselves (`[data-glaze-panel]`, so the scene can't
-   * photograph its own glass) and anything marked `[data-glaze-no-capture]`
+   * the glass panels themselves (`[data-kussetsu-panel]`, so the scene can't
+   * photograph its own glass) and anything marked `[data-kussetsu-no-capture]`
    * (crisp UI — labels, headings — that should sit on top of the glass rather
    * than be refracted by it).
    */
@@ -46,7 +46,7 @@ export function supportsNativeCapture(): boolean {
 
 const defaultExclude = (el: Element): boolean =>
   el instanceof HTMLElement &&
-  (el.hasAttribute("data-glaze-panel") || el.hasAttribute("data-glaze-no-capture"));
+  (el.hasAttribute("data-kussetsu-panel") || el.hasAttribute("data-kussetsu-no-capture"));
 
 export async function captureBackdrop(
   sceneEl: HTMLElement,

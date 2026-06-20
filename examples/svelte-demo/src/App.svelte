@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hasWebGPU } from "@glaze/core";
+  import { hasWebGPU } from "@kussetsu/core";
   import Showcase from "./Showcase.svelte";
   import Glass from "./Glass.svelte";
 
@@ -7,9 +7,9 @@
 </script>
 
 <header class="topnav">
-  <span class="brand">Glaze</span>
+  <span class="brand">Kussetsu</span>
   <span class="spacer"></span>
-  <a class="gh" href="https://github.com/StephenSHorton/glaze" target="_blank" rel="noopener noreferrer">
+  <a class="gh" href="https://github.com/StephenSHorton/kussetsu" target="_blank" rel="noopener noreferrer">
     GitHub ↗
   </a>
 </header>

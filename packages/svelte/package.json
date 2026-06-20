@@ -1,10 +1,29 @@
 {
-  "name": "@glaze/svelte",
-  "version": "0.0.1",
-  "description": "Svelte binding for Glaze: <GlassScene>/<GlassPanel> components and a use:shader action for refractive WGSL glass UI.",
+  "name": "@kussetsu/svelte",
+  "version": "0.1.0",
+  "description": "Svelte binding for Kussetsu: <GlassScene>/<GlassPanel> components and a use:shader action for refractive WGSL glass UI.",
   "type": "module",
   "license": "MIT",
-  "files": ["src"],
+  "author": "Stephen Horton",
+  "homepage": "https://github.com/StephenSHorton/kussetsu#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StephenSHorton/kussetsu.git",
+    "directory": "packages/svelte"
+  },
+  "bugs": "https://github.com/StephenSHorton/kussetsu/issues",
+  "keywords": [
+    "svelte",
+    "webgpu",
+    "wgsl",
+    "shader",
+    "glass",
+    "glassmorphism",
+    "ui"
+  ],
+  "files": [
+    "src"
+  ],
   "types": "./src/index.ts",
   "svelte": "./src/index.ts",
   "exports": {
@@ -14,12 +33,15 @@
       "default": "./src/index.ts"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "echo \"@glaze/svelte ships source; consumers compile it via the svelte export condition\"",
+    "build": "echo \"@kussetsu/svelte ships source; consumers compile it via the svelte export condition\"",
     "typecheck": "echo \"typecheck via svelte-check (not configured in v1)\""
   },
   "dependencies": {
-    "@glaze/core": "0.0.1"
+    "@kussetsu/core": "0.1.0"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

@@ -1,4 +1,4 @@
-import { createShaderSurface, type ShaderOptions, type Uniforms } from "@glaze/core";
+import { createShaderSurface, type ShaderOptions, type Uniforms } from "@kussetsu/core";
 import type { Action } from "svelte/action";
 
 export type ShaderActionOptions = ShaderOptions;
@@ -8,12 +8,12 @@ export type ShaderActionOptions = ShaderOptions;
  *
  * ```svelte
  * <script>
- *   import { shader } from "@glaze/svelte";
+ *   import { shader } from "@kussetsu/svelte";
  *   let intensity = $state(0.4);
  *   const wgsl = `
  *     @uniform intensity: f32;
  *     fn paint(uv: vec2f) -> vec4f {
- *       return vec4f(vec3f(glaze_fbm(uv * 4.0 + globals.time * 0.1)) * u.intensity, 1.0);
+ *       return vec4f(vec3f(kussetsu_fbm(uv * 4.0 + globals.time * 0.1)) * u.intensity, 1.0);
  *     }`;
  * </script>
  *

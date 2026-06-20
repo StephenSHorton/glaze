@@ -83,7 +83,7 @@ function applyFallback(el: HTMLElement, fb: Fallback): void {
 }
 
 /**
- * Create a Glaze shader surface bound to `target`. The shader paints into a
+ * Create a Kussetsu shader surface bound to `target`. The shader paints into a
  * per-element canvas inserted behind the element's content, so the element's
  * text, links and focus stay real DOM and scroll natively with the canvas.
  *
@@ -157,7 +157,7 @@ export function createShaderSurface(
     const base = field.offset / 4;
     if (typeof value === "number") {
       if (lanes !== 1)
-        console.warn(`[glaze] uniform "${field.name}" is ${field.type}; got a scalar.`);
+        console.warn(`[kussetsu] uniform "${field.name}" is ${field.type}; got a scalar.`);
       userStore[base] = value;
     } else if (typeof value === "boolean") {
       userStore[base] = value ? 1 : 0;
@@ -165,7 +165,7 @@ export function createShaderSurface(
       const arr = value as ArrayLike<number>;
       if (arr.length !== lanes)
         console.warn(
-          `[glaze] uniform "${field.name}" is ${field.type} (${lanes} floats); got ${arr.length}.`,
+          `[kussetsu] uniform "${field.name}" is ${field.type} (${lanes} floats); got ${arr.length}.`,
         );
       for (let i = 0; i < lanes; i++) userStore[base + i] = arr[i] ?? 0;
     }
@@ -177,7 +177,7 @@ export function createShaderSurface(
       const field = layout.byName.get(key);
       const value = next[key];
       if (!field) {
-        console.warn(`[glaze] unknown uniform "${key}" — not declared with @uniform in the shader.`);
+        console.warn(`[kussetsu] unknown uniform "${key}" — not declared with @uniform in the shader.`);
         continue;
       }
       if (value !== undefined) writeUniform(field, value);
@@ -347,7 +347,7 @@ export function createShaderSurface(
 
     device.lost.then((info) => {
       if (destroyed) return;
-      console.warn(`[glaze] GPU device lost: ${info.message}`);
+      console.warn(`[kussetsu] GPU device lost: ${info.message}`);
       stopLoop();
       fail("device-lost");
     });
@@ -365,7 +365,7 @@ export function createShaderSurface(
     const shaderModule = device.createShaderModule({ code: assembled.module });
     const info = await shaderModule.getCompilationInfo();
     for (const m of info.messages) {
-      if (m.type === "error") console.error(`[glaze] WGSL ${m.type}: ${m.message} (line ${m.lineNum})`);
+      if (m.type === "error") console.error(`[kussetsu] WGSL ${m.type}: ${m.message} (line ${m.lineNum})`);
     }
 
     const bglEntries: GPUBindGroupLayoutEntry[] = [
@@ -397,21 +397,21 @@ export function createShaderSurface(
     try {
       pipeline = await device.createRenderPipelineAsync({
         layout: pipelineLayout,
-        vertex: { module: shaderModule, entryPoint: "glaze_vs" },
+        vertex: { module: shaderModule, entryPoint: "kussetsu_vs" },
         fragment: {
           module: shaderModule,
-          entryPoint: "glaze_fs",
+          entryPoint: "kussetsu_fs",
           targets: [{ format: gpu.format }],
         },
         primitive: { topology: "triangle-list" },
       });
     } catch (err) {
-      console.error("[glaze] pipeline creation failed:", err);
+      console.error("[kussetsu] pipeline creation failed:", err);
     }
     const scopeError = await device.popErrorScope();
     if (destroyed) return;
     if (!pipeline || scopeError) {
-      if (scopeError) console.error(`[glaze] ${scopeError.message}`);
+      if (scopeError) console.error(`[kussetsu] ${scopeError.message}`);
       fail("shader-error");
       return;
     }
@@ -427,7 +427,7 @@ export function createShaderSurface(
         loaded.push(lt);
       }
     } catch (err) {
-      console.error("[glaze] texture load failed:", err);
+      console.error("[kussetsu] texture load failed:", err);
       fail("texture-error");
       return;
     }

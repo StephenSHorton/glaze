@@ -1,20 +1,24 @@
 {
-  "name": "glaze-monorepo",
+  "name": "kussetsu-monorepo",
   "version": "0.0.0",
   "private": true,
-  "description": "Glaze — shaders as a reactive, accessible-by-default paint primitive for the web.",
+  "description": "Kussetsu — shaders as a reactive, accessible-by-default paint primitive for the web.",
   "type": "module",
   "workspaces": [
     "packages/*",
     "examples/*"
   ],
   "scripts": {
-    "build": "npm run build -w @glaze/core && npm run build -w @glaze/svelte",
-    "typecheck": "npm run typecheck -w @glaze/core && npm run typecheck -w @glaze/svelte",
-    "dev:demo": "npm run dev -w glaze-svelte-demo",
-    "build:demo": "npm run build -w glaze-svelte-demo"
+    "build": "npm run build -w @kussetsu/core && npm run build -w @kussetsu/svelte && npm run build -w @kussetsu/react",
+    "typecheck": "npm run typecheck -w @kussetsu/core && npm run typecheck -w @kussetsu/svelte && npm run typecheck -w @kussetsu/react",
+    "dev:demo": "npm run dev -w kussetsu-svelte-demo",
+    "build:demo": "npm run build -w kussetsu-svelte-demo",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.9",
     "typescript": "^5.6.3"
   },
   "engines": {

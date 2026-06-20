@@ -21,8 +21,8 @@ export type TextureSource =
 export type Textures = Record<string, TextureSource>;
 
 /**
- * What Glaze renders when WebGPU is unavailable, the shader fails to compile,
- * or the device is lost. A fallback is mandatory by design: a Glaze surface
+ * What Kussetsu renders when WebGPU is unavailable, the shader fails to compile,
+ * or the device is lost. A fallback is mandatory by design: a Kussetsu surface
  * should never leave a blank hole on an unsupported client.
  */
 export type Fallback =
@@ -74,7 +74,7 @@ export interface ShaderOptions {
   readonly pauseWhenOffscreen?: boolean;
   /** Device-pixel-ratio cap, to bound cost on high-DPR / low-power devices. Default 2. */
   readonly maxDpr?: number;
-  /** Called once if Glaze falls back instead of rendering on the GPU. */
+  /** Called once if Kussetsu falls back instead of rendering on the GPU. */
   readonly onFallback?: (reason: FallbackReason) => void;
   /** Called once the GPU surface is live and the first frame has been drawn. */
   readonly onReady?: () => void;

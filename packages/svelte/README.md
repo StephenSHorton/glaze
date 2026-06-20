@@ -1,10 +1,10 @@
-# @glaze/svelte
+# @kussetsu/svelte
 
-Svelte binding for [Glaze](https://github.com/StephenSHorton/glaze) — a `use:shader` action that paints a reactive WGSL shader behind any element, with uniforms bound straight to component state.
+Svelte binding for [Kussetsu](https://github.com/StephenSHorton/kussetsu) — a `use:shader` action that paints a reactive WGSL shader behind any element, with uniforms bound straight to component state.
 
 ```svelte
 <script>
-  import { shader } from "@glaze/svelte";
+  import { shader } from "@kussetsu/svelte";
   let intensity = $state(0.6);
 </script>
 
@@ -13,7 +13,7 @@ Svelte binding for [Glaze](https://github.com/StephenSHorton/glaze) — a `use:s
     wgsl: `
       @uniform intensity: f32;
       fn paint(uv: vec2f) -> vec4f {
-        let n = glaze_fbm(uv * 4.0 + globals.time * 0.1);
+        let n = kussetsu_fbm(uv * 4.0 + globals.time * 0.1);
         return vec4f(vec3f(0.3, 0.5, 0.9) * n * u.intensity, 1.0);
       }`,
     uniforms: { intensity },
@@ -28,6 +28,6 @@ Svelte binding for [Glaze](https://github.com/StephenSHorton/glaze) — a `use:s
 
 When the `uniforms` object changes (because it references reactive `$state`), the action pushes new values to the GPU. When `wgsl` changes, the surface is recreated (handy for HMR).
 
-Requires `svelte@^5` (peer dependency). Wraps [`@glaze/core`](https://www.npmjs.com/package/@glaze/core); see the root README for the design rationale and the shader contract.
+Requires `svelte@^5` (peer dependency). Wraps [`@kussetsu/core`](https://www.npmjs.com/package/@kussetsu/core); see the root README for the design rationale and the shader contract.
 
 MIT
