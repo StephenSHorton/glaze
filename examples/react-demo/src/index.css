@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Reserve the scrollbar gutter so opening a modal (Radix locks scroll → removes
+   the scrollbar) can't shift the page — a shift would make every glass panel's
+   refraction jump against its fixed captured backdrop. */
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  background: #05060c;
+  color: #e7e9f3;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.55;
+}
+
+/* Grass wallpaper for the glass to refract (matches the GitHub Pages demo:
+   bgBlur 3 → a soft, depth-of-field wallpaper). It extends well above/below the
+   scene (top/height) so it has headroom to translate without exposing an edge,
+   and translateY is driven by the GlassScene's scroll-parallax var so it lags
+   the page; the scene feeds the glass a matching sample offset (seam-free). */
+.ks-bg {
+  position: absolute;
+  top: -35%;
+  left: -48px;
+  right: -48px;
+  height: 170%;
+  background-image: url("/grass.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(3px);
+  transform: translateY(var(--kussetsu-parallax-y, 0px));
+  will-change: transform;
+}

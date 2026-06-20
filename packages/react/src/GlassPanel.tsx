@@ -108,9 +108,11 @@ export function GlassPanel({
     const w = s.width || 1;
     const h = s.height || 1;
     const f = frameRef.current;
+    const par = sceneRef.current?.getParallax?.() ?? [0, 0];
     return {
       origin: [(p.left - s.left) / w, (p.top - s.top) / h],
       size: [p.width / w, p.height / h],
+      parallax: [par[0], par[1]],
       radius: f.radius ?? resolvedRadiusRef.current,
       blur: f.blur * 0.001,
       bgBlur: f.bgBlur * 0.001,
@@ -145,6 +147,7 @@ export function GlassPanel({
       uniforms: {
         origin: [0, 0],
         size: [1, 1],
+        parallax: [0, 0],
         radius: resolvedRadiusRef.current,
         blur: blur * 0.001,
         bgBlur: bgBlur * 0.001,

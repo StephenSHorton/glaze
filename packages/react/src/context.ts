@@ -8,6 +8,12 @@ export interface GlassSceneContextValue {
   backdrop: HTMLCanvasElement | null;
   /** True if capture failed (panels should use the CSS-glass fallback). */
   failed: boolean;
+  /**
+   * Current backdrop-sample offset in scene UV, read per-frame by each panel.
+   * Non-zero only when the scene drives a parallax drift; the scene translates
+   * the visible backdrop by the matching amount so the glass stays seam-free.
+   */
+  getParallax?: () => readonly [number, number];
 }
 
 export const GlassSceneContext = createContext<GlassSceneContextValue | null>(null);
