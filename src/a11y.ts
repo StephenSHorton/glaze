@@ -1,18 +1,19 @@
 // The invisible DOM "semantics overlay" (Flutter's flt-semantics model): one
 // transparent, correctly-tagged, focusable DOM proxy per interactive/semantic node,
-// positioned over the GPU-painted pixels. Screen readers, keyboard nav, and focus
-// all work even though every visible pixel is drawn by WebGPU. This is the piece
-// Zed's GPUI deferred — and the reason canvas UIs are usually a11y black boxes.
+// positioned over the GPU-painted pixels. Screen readers, keyboard nav, focus, AND
+// pointer/keyboard DRAG all work even though every visible pixel is WebGPU.
 import type { Role } from "./scene";
 
 export interface SemNode {
   id: string;
-  role: Role;
+  role?: Role; // undefined => a plain interactive region (e.g. draggable)
   label: string;
   rect: { x: number; y: number; width: number; height: number };
   focusable: boolean;
   level?: number;
+  draggable?: boolean;
   onActivate?: () => void;
+  onDrag?: (worldDx: number, worldDy: number) => void;
 }
 
 export interface FocusBridge {
@@ -25,14 +26,13 @@ interface Proxy {
 }
 
 const TAG: Record<Role, keyof HTMLElementTagNameMap> = { button: "button", heading: "h2", paragraph: "p" };
-const INTERACTIVE: Record<Role, boolean> = { button: true, heading: false, paragraph: false };
 
 export class SemanticsOverlay {
   private root: HTMLElement;
   private pool = new Map<string, Proxy>();
   private keyboardActive = false;
 
-  constructor(container: HTMLElement, private bridge: FocusBridge) {
+  constructor(container: HTMLElement, private bridge: FocusBridge, private getScale: () => number) {
     this.root = container;
     addEventListener("keydown", () => (this.keyboardActive = true), true);
     addEventListener("pointerdown", () => (this.keyboardActive = false), true);
@@ -44,10 +44,14 @@ export class SemanticsOverlay {
   }
 
   private tagFor(node: SemNode): string {
+    if (!node.role) return "div";
     return node.role === "heading" ? `h${Math.min(6, Math.max(1, node.level ?? 2))}` : TAG[node.role];
   }
 
-  /** Diff a flat node list against the pool. Reuse, never recreate. Per commit. */
+  private interactive(node: SemNode): boolean {
+    return node.role === "button" || !!node.draggable;
+  }
+
   syncFromScene(nodes: readonly SemNode[]): void {
     const seen = new Set<string>();
     const focusedId = (document.activeElement as HTMLElement | null)?.dataset?.nodeId;
@@ -62,8 +66,8 @@ export class SemanticsOverlay {
         proxy = { el: fresh, node };
         this.pool.set(node.id, proxy);
       }
+      proxy.node = node; // keep latest (handlers read this)
       this.updateProxy(proxy, node);
-      proxy.node = node;
     }
 
     for (const [id, proxy] of this.pool) {
@@ -72,13 +76,10 @@ export class SemanticsOverlay {
         this.pool.delete(id);
       }
     }
-
-    // DOM order == AT reading/tab order.
     for (const node of nodes) {
       const el = this.pool.get(node.id)?.el;
       if (el) this.root.appendChild(el);
     }
-
     if (focusedId && this.pool.has(focusedId)) {
       const el = this.pool.get(focusedId)!.el;
       if (document.activeElement !== el) el.focus({ preventScroll: true });
@@ -97,21 +98,63 @@ export class SemanticsOverlay {
       border: "0",
       background: "transparent",
       color: "transparent",
-      outline: "none", // real ring is GPU-painted via the bridge
+      outline: "none",
       appearance: "none",
       font: "inherit",
-      pointerEvents: INTERACTIVE[node.role] ? "auto" : "none",
+      touchAction: "none",
+      cursor: node.draggable ? "grab" : "",
+      pointerEvents: this.interactive(node) ? "auto" : "none",
     } as Partial<CSSStyleDeclaration>);
 
     el.addEventListener("click", (e) => {
       e.preventDefault();
       this.pool.get(node.id)?.node.onActivate?.();
     });
-    el.addEventListener("keydown", (e) => {
-      // <button> already fires click on Enter/Space; this covers role-emulated nodes.
-      if ((e.key === "Enter" || e.key === " ") && node.role !== "button") {
+
+    if (node.draggable) {
+      let dragging = false;
+      let lastX = 0;
+      let lastY = 0;
+      el.addEventListener("pointerdown", (e) => {
+        dragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        el.setPointerCapture(e.pointerId);
+        el.style.cursor = "grabbing";
         e.preventDefault();
-        this.pool.get(node.id)?.node.onActivate?.();
+      });
+      el.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const s = this.getScale() || 1;
+        const dx = (e.clientX - lastX) / s;
+        const dy = (e.clientY - lastY) / s;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        this.pool.get(node.id)?.node.onDrag?.(dx, dy);
+      });
+      const end = (e: PointerEvent) => {
+        dragging = false;
+        el.releasePointerCapture(e.pointerId);
+        el.style.cursor = "grab";
+      };
+      el.addEventListener("pointerup", end);
+      el.addEventListener("pointercancel", end);
+    }
+
+    el.addEventListener("keydown", (e) => {
+      const cur = this.pool.get(node.id)?.node;
+      if (!cur) return;
+      if ((e.key === "Enter" || e.key === " ") && cur.role !== "button") {
+        e.preventDefault();
+        cur.onActivate?.();
+      }
+      if (cur.draggable) {
+        const step = 24;
+        const d: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+        if (d[e.key]) {
+          e.preventDefault();
+          cur.onDrag?.(d[e.key][0], d[e.key][1]);
+        }
       }
     });
     return el;
@@ -119,13 +162,10 @@ export class SemanticsOverlay {
 
   private updateProxy(proxy: Proxy, node: SemNode): void {
     const { el } = proxy;
-    const prev = proxy.node;
     const r = node.rect;
-    if (prev === node || prev.rect.x !== r.x || prev.rect.y !== r.y || prev.rect.width !== r.width || prev.rect.height !== r.height) {
-      el.style.transform = `translate(${r.x}px, ${r.y}px)`;
-      el.style.width = `${r.width}px`;
-      el.style.height = `${r.height}px`;
-    }
+    el.style.transform = `translate(${r.x}px, ${r.y}px)`;
+    el.style.width = `${r.width}px`;
+    el.style.height = `${r.height}px`;
     el.setAttribute("aria-label", node.label);
     if (node.role === "heading" || node.role === "paragraph") el.textContent = node.label;
     if (node.role === "heading") el.setAttribute("aria-level", String(node.level ?? 2));

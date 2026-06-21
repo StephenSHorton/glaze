@@ -4,7 +4,7 @@ import { Painter } from "./webgpu";
 import { layout } from "./layout";
 import { SemanticsOverlay } from "./a11y";
 import { collectRects, collectTexts, collectSemantics, collectGlass } from "./collect";
-import type { Container, ElementNode } from "./scene";
+import type { Camera, Container, ElementNode } from "./scene";
 import { App } from "./App";
 
 const canvas = document.getElementById("gpu") as HTMLCanvasElement;
@@ -26,12 +26,62 @@ async function boot() {
     throw err;
   }
 
-  const overlay = new SemanticsOverlay(a11yHost, {
-    setFocusRing(id) {
-      focusedId = id != null ? Number(id) : null;
+  const camera: Camera = { tx: 0, ty: 0, scale: 1 };
+  const overlay = new SemanticsOverlay(
+    a11yHost,
+    {
+      setFocusRing(id) {
+        focusedId = id != null ? Number(id) : null;
+        container.dirty = true;
+      },
+    },
+    () => camera.scale,
+  );
+
+  // Pan: drag empty space (events fall through the overlay to the canvas).
+  let panning = false;
+  let panX = 0;
+  let panY = 0;
+  canvas.addEventListener("pointerdown", (e) => {
+    panning = true;
+    panX = e.clientX;
+    panY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!panning) return;
+    camera.tx += e.clientX - panX;
+    camera.ty += e.clientY - panY;
+    panX = e.clientX;
+    panY = e.clientY;
+    container.dirty = true;
+  });
+  const endPan = (e: PointerEvent) => {
+    panning = false;
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* not captured */
+    }
+  };
+  canvas.addEventListener("pointerup", endPan);
+  canvas.addEventListener("pointercancel", endPan);
+
+  // Zoom around the cursor.
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const ns = Math.min(3, Math.max(0.35, camera.scale * Math.exp(-e.deltaY * 0.0015)));
+      const wx = (e.offsetX - camera.tx) / camera.scale;
+      const wy = (e.offsetY - camera.ty) / camera.scale;
+      camera.tx = e.offsetX - wx * ns;
+      camera.ty = e.offsetY - wy * ns;
+      camera.scale = ns;
       container.dirty = true;
     },
-  });
+    { passive: false },
+  );
 
   const rootElement = (): ElementNode | null =>
     (container.children.find((c) => c.kind === "element") as ElementNode | undefined) ?? null;
@@ -43,8 +93,8 @@ async function boot() {
       if (root) {
         const { cssWidth, cssHeight } = painter.size();
         layout(root, cssWidth, cssHeight);
-        painter.frame(collectRects(root, focusedId), collectTexts(root), collectGlass(root));
-        overlay.syncFromScene(collectSemantics(root));
+        painter.frame(collectRects(root, focusedId, camera), collectTexts(root, camera), collectGlass(root, camera));
+        overlay.syncFromScene(collectSemantics(root, camera));
       }
     }
     requestAnimationFrame(loop);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { RGBA } from "./scene";
 
 const WHITE: RGBA = [0.96, 0.97, 1, 1];
@@ -24,24 +24,8 @@ function NodeCard({ label, color }: { label: string; color: RGBA }) {
 }
 
 export function App() {
-  // Animate via React state (proves React drives even the moving glass).
-  const [t, setT] = useState(0);
-  useEffect(() => {
-    let raf = 0;
-    const start = performance.now();
-    const tick = () => {
-      setT((performance.now() - start) / 1000);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  const panelW = 300;
-  const panelH = 210;
-  // Keep the sweep over the colorful node cards (x ~56–692, two rows).
-  const gx = 210 + Math.sin(t * 0.5) * 160;
-  const gy = 235 + Math.cos(t * 0.8) * 95;
+  // Glass panel position in WORLD coords; dragged via the invisible overlay.
+  const [pos, setPos] = useState({ x: 150, y: 205 });
 
   return (
     <view style={{ direction: "column", padding: 56, gap: 26, background: PAGE }}>
@@ -50,7 +34,7 @@ export function App() {
           Glass on a framebuffer we own
         </text>
         <text role="paragraph" style={{ fontSize: 16, color: MUTED }}>
-          The floating panel refracts whatever is behind it — over any node, anywhere. No capture, no compositor limits.
+          Drag the glass over the nodes · scroll to zoom · drag the background to pan.
         </text>
       </view>
 
@@ -65,10 +49,13 @@ export function App() {
         ))}
       </view>
 
-      {/* The refractive glass panel — absolutely positioned, swept across the nodes. */}
+      {/* Draggable refractive glass panel — grab it and shove it over the graph. */}
       <view
         glass={{ refraction: 0.13, frost: 5, tint: 0.07, rim: 30 }}
-        style={{ absolute: { x: gx, y: gy }, width: panelW, height: panelH, radius: 28 }}
+        draggable
+        ariaLabel="Draggable glass panel"
+        onDrag={(dx, dy) => setPos((p) => ({ x: p.x + dx, y: p.y + dy }))}
+        style={{ absolute: pos, width: 300, height: 210, radius: 28 }}
       />
     </view>
   );

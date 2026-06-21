@@ -39,8 +39,17 @@ export interface NodeProps {
   ariaLabel?: string;
   level?: number; // heading level
   onActivate?: () => void;
+  draggable?: boolean;
+  onDrag?: (worldDx: number, worldDy: number) => void; // delta in WORLD px
   glass?: GlassSpec; // present => painted as refractive glass
   children?: unknown;
+}
+
+// Pan/zoom view transform: screen = world * scale + (tx, ty). All CSS px.
+export interface Camera {
+  tx: number;
+  ty: number;
+  scale: number;
 }
 
 export interface ElementNode {

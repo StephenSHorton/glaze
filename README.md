@@ -42,6 +42,10 @@ reconciler commit → `resetAfterCommit` marks dirty → rAF re-layouts → GPU 
   glass panel samples the real backdrop behind it and refracts it — over any
   content, multiple elements at once, with no "capture a region" hack. This is
   the exact effect the browser compositor forbade (the problem that started this).
+- **Canvas-native interaction:** drag the glass, pan the graph (drag empty space),
+  zoom around the cursor (wheel) — a {tx,ty,scale} camera applied in the collectors,
+  with all pointer + keyboard input (including drag) routed through the invisible
+  overlay. The wedge gesture (60fps zoom/pan of a node graph) the DOM is bad at.
 - Accessibility is **not** sacrificed: a screen reader reads a real `<h1>`,
   two `<p>`s, and a labeled `<button>`; keyboard focus works; the focus ring is
   GPU-painted (the bit Zed's GPUI deferred and Flutter Web shipped).
