@@ -80,10 +80,16 @@ reconciler commit → `resetAfterCommit` marks dirty → rAF re-layouts → GPU 
   the input's selection. This is the standard canvas-editor move (Excalidraw) that
   sidesteps "a `<canvas>` can't receive composition events." (Focus on a
   `setTimeout(0)` so the default mousedown doesn't steal it.)
+- **Text — glyph atlas (B) DONE.** Whole-string textures are replaced by a packed
+  **glyph atlas**: each glyph is rasterized once (supersampled at a base size) into
+  a shared atlas texture; text is drawn as **instanced per-glyph quads** tinted by
+  a per-instance color. One draw for all text, reused glyphs, crisp when scaled
+  down. (Positions use per-glyph advance — kerning slightly off vs the browser's
+  shaped string, imperceptible for UI text; the old `getText`/text pipeline is dead.)
 
 ## What it deliberately does NOT (yet) solve
-Bidi / complex-script (RTL, Arabic/Indic) text selection, a glyph atlas (whole-string
-textures still), in-canvas text editing/IME, and a thousand edge cases.
+Bidi / complex-script (RTL, Arabic/Indic) text selection, MSDF (crisp at *any*
+zoom — the atlas softens past its base size), and a thousand edge cases.
 Still a feasibility spike, not a framework.
 
 ## Stress demo (the validation artifact)

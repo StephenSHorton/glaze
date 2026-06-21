@@ -40,6 +40,39 @@ export interface GlassPanel {
   rim: number; // rim band width, CSS px
 }
 
+// Glyph atlas: instanced per-glyph quads sampling a packed alpha atlas, tinted by
+// a per-instance color. Crisp + reuses each glyph once (vs a texture per string).
+const GLYPH_WGSL = /* wgsl */ `
+struct VP { size: vec2f };
+@group(0) @binding(0) var<uniform> vp: VP;
+@group(0) @binding(1) var samp: sampler;
+@group(0) @binding(2) var atlas: texture_2d<f32>;
+struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) color: vec4f, @location(2) screenPos: vec2f, @location(3) clip: vec4f };
+const Q = array<vec2f,6>(vec2f(0,0),vec2f(1,0),vec2f(0,1), vec2f(0,1),vec2f(1,0),vec2f(1,1));
+@vertex fn vs(@builtin(vertex_index) vi: u32, @location(0) rect: vec4f, @location(1) uv: vec4f, @location(2) color: vec4f, @location(3) clip: vec4f) -> VSOut {
+  let q = Q[vi];
+  let px = rect.xy + q*rect.zw;
+  let ndc = vec2f(px.x/vp.size.x*2.0-1.0, -(px.y/vp.size.y*2.0-1.0));
+  var o: VSOut;
+  o.pos = vec4f(ndc,0,1);
+  o.uv = vec2f(mix(uv.x, uv.z, q.x), mix(uv.y, uv.w, q.y));
+  o.color = color; o.screenPos = px; o.clip = clip;
+  return o;
+}
+fn clipAlpha(p: vec2f, clip: vec4f) -> f32 {
+  if (clip.z <= 0.0) { return 1.0; }
+  let x1 = clip.x + clip.z; let y1 = clip.y + clip.w;
+  let ax = smoothstep(clip.x - 0.5, clip.x + 0.5, p.x) * (1.0 - smoothstep(x1 - 0.5, x1 + 0.5, p.x));
+  let ay = smoothstep(clip.y - 0.5, clip.y + 0.5, p.y) * (1.0 - smoothstep(y1 - 0.5, y1 + 0.5, p.y));
+  return ax * ay;
+}
+@fragment fn fs(in: VSOut) -> @location(0) vec4f {
+  let cov = textureSample(atlas, samp, in.uv).a;
+  let a = cov * in.color.a * clipAlpha(in.screenPos, in.clip);
+  return vec4f(in.color.rgb * a, a);
+}
+`;
+
 const PREMUL_BLEND: GPUBlendState = {
   color: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
   alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
@@ -207,6 +240,26 @@ fn sdRoundBox(p: vec2f, b: vec2f, r: f32) -> f32 { let q = abs(p)-b+vec2f(r); re
 export const FLOATS_PER_RECT = 16;
 const RECT_STRIDE = FLOATS_PER_RECT * 4;
 
+// Glyph atlas: glyphs are rasterized once at a BASE size (supersampled) and scaled
+// per display size. Crisp for UI text; only soft when zoomed past BASE.
+const GLYPH_BASE = 44; // CSS px the atlas glyph is measured at
+const GLYPH_SS = 2; // atlas supersample
+const GLYPH_PAD = 2; // CSS px padding around each glyph cell (overhang)
+const GLYPH_ASCENT = Math.round(GLYPH_BASE * 0.98);
+const ATLAS_SIZE = 1024;
+const FLOATS_PER_GLYPH = 16; // [x,y,w,h][u0,v0,u1,v1][r,g,b,a][clip]
+const GLYPH_STRIDE = FLOATS_PER_GLYPH * 4;
+
+interface GlyphEntry {
+  u0: number;
+  v0: number;
+  u1: number;
+  v1: number;
+  cellW: number; // CSS px (BASE scale)
+  cellH: number;
+  advance: number;
+}
+
 function rgbaCss(c: RGBA): string {
   return `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${c[3]})`;
 }
@@ -242,6 +295,19 @@ export class Painter {
   private nodeBuffer: GPUBuffer | null = null;
   private nodeCount = 0;
   private nodeCap = 0;
+
+  // Glyph atlas (Gap B): glyphs rasterized once into a packed alpha atlas.
+  private glyphPipeline!: GPURenderPipeline;
+  private atlasTex!: GPUTexture;
+  private atlasBindGroup!: GPUBindGroup;
+  private glyph2d!: CanvasRenderingContext2D;
+  private glyphCache = new Map<string, GlyphEntry>();
+  private packX = 1;
+  private packY = 1;
+  private packRowH = 0;
+  private glyphBuf: GPUBuffer | null = null;
+  private glyphCap = 0;
+  private glyphScratch = new Float32Array(0);
 
   private constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -317,6 +383,44 @@ export class Painter {
       entries: [{ binding: 0, resource: { buffer: this.vpBuffer } }],
     });
     this.sampler = device.createSampler({ magFilter: "linear", minFilter: "linear" });
+
+    // --- Gap B: glyph atlas pipeline + texture ---
+    const glyphModule = device.createShaderModule({ code: GLYPH_WGSL });
+    this.glyphPipeline = device.createRenderPipeline({
+      layout: "auto",
+      vertex: {
+        module: glyphModule,
+        entryPoint: "vs",
+        buffers: [
+          {
+            arrayStride: GLYPH_STRIDE,
+            stepMode: "instance",
+            attributes: [
+              { shaderLocation: 0, offset: 0, format: "float32x4" }, // rect
+              { shaderLocation: 1, offset: 16, format: "float32x4" }, // uv
+              { shaderLocation: 2, offset: 32, format: "float32x4" }, // color
+              { shaderLocation: 3, offset: 48, format: "float32x4" }, // clip
+            ],
+          },
+        ],
+      },
+      fragment: { module: glyphModule, entryPoint: "fs", targets: [{ format, blend: PREMUL_BLEND }] },
+      primitive: { topology: "triangle-list" },
+    });
+    this.atlasTex = device.createTexture({
+      size: [ATLAS_SIZE, ATLAS_SIZE],
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    this.atlasBindGroup = device.createBindGroup({
+      layout: this.glyphPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.vpBuffer } },
+        { binding: 1, resource: this.sampler },
+        { binding: 2, resource: this.atlasTex.createView() },
+      ],
+    });
+    this.glyph2d = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
   }
 
   size(): { cssWidth: number; cssHeight: number } {
@@ -438,6 +542,89 @@ export class Painter {
     return entry;
   }
 
+  // --- Gap B: glyph atlas ---
+  private getGlyph(char: string, weight: number): GlyphEntry {
+    const key = `${weight}|${char}`;
+    const cached = this.glyphCache.get(key);
+    if (cached) return cached;
+    const font = `${weight} ${GLYPH_BASE}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+    this.glyph2d.font = font;
+    const advance = this.glyph2d.measureText(char).width;
+    const cellW = Math.max(1, Math.ceil(advance) + GLYPH_PAD * 2);
+    const cellH = Math.ceil(GLYPH_BASE * 1.3);
+    const aw = cellW * GLYPH_SS;
+    const ah = cellH * GLYPH_SS;
+    if (this.packX + aw > ATLAS_SIZE) {
+      this.packX = 1;
+      this.packY += this.packRowH + 1;
+      this.packRowH = 0;
+    }
+    if (this.packY + ah > ATLAS_SIZE || char === " " || advance <= 0) {
+      // atlas full or whitespace: cache an empty entry (advance only)
+      const e: GlyphEntry = { u0: 0, v0: 0, u1: 0, v1: 0, cellW, cellH, advance };
+      this.glyphCache.set(key, e);
+      return e;
+    }
+    const px = this.packX;
+    const py = this.packY;
+    this.packX += aw + 1;
+    this.packRowH = Math.max(this.packRowH, ah);
+    const off = document.createElement("canvas");
+    off.width = aw;
+    off.height = ah;
+    const o = off.getContext("2d")!;
+    o.scale(GLYPH_SS, GLYPH_SS);
+    o.font = font;
+    o.fillStyle = "#fff"; // white alpha mask; tinted per-instance in the shader
+    o.textBaseline = "alphabetic";
+    o.fillText(char, GLYPH_PAD, GLYPH_ASCENT);
+    this.device.queue.copyExternalImageToTexture({ source: off, flipY: false }, { texture: this.atlasTex, origin: { x: px, y: py }, premultipliedAlpha: true }, [aw, ah]);
+    const entry: GlyphEntry = { u0: px / ATLAS_SIZE, v0: py / ATLAS_SIZE, u1: (px + aw) / ATLAS_SIZE, v1: (py + ah) / ATLAS_SIZE, cellW, cellH, advance };
+    this.glyphCache.set(key, entry);
+    return entry;
+  }
+
+  private drawGlyphs(pass: GPURenderPassEncoder, texts: TextItem[]) {
+    let total = 0;
+    for (const t of texts) total += t.text.length;
+    if (total === 0) return;
+    const need = total * FLOATS_PER_GLYPH;
+    if (this.glyphScratch.length < need) this.glyphScratch = new Float32Array(Math.ceil(need * 1.3));
+    const data = this.glyphScratch;
+    let n = 0;
+    for (const t of texts) {
+      const scale = t.size / GLYPH_BASE;
+      const cl = t.clip;
+      let penX = 0;
+      for (const ch of t.text) {
+        const e = this.getGlyph(ch, t.weight);
+        if (e.u1 > e.u0) {
+          const o = n * FLOATS_PER_GLYPH;
+          data[o] = t.x + (penX - GLYPH_PAD) * scale;
+          data[o + 1] = t.y;
+          data[o + 2] = e.cellW * scale;
+          data[o + 3] = e.cellH * scale;
+          data[o + 4] = e.u0; data[o + 5] = e.v0; data[o + 6] = e.u1; data[o + 7] = e.v1;
+          data[o + 8] = t.color[0]; data[o + 9] = t.color[1]; data[o + 10] = t.color[2]; data[o + 11] = t.color[3];
+          data[o + 12] = cl ? cl[0] : 0; data[o + 13] = cl ? cl[1] : 0; data[o + 14] = cl ? cl[2] : 0; data[o + 15] = cl ? cl[3] : 0;
+          n++;
+        }
+        penX += e.advance;
+      }
+    }
+    if (n === 0) return;
+    if (n > this.glyphCap) {
+      this.glyphBuf?.destroy();
+      this.glyphCap = Math.ceil(n * 1.3);
+      this.glyphBuf = this.device.createBuffer({ size: this.glyphCap * GLYPH_STRIDE, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+    }
+    this.device.queue.writeBuffer(this.glyphBuf!, 0, data, 0, n * FLOATS_PER_GLYPH);
+    pass.setPipeline(this.glyphPipeline);
+    pass.setBindGroup(0, this.atlasBindGroup);
+    pass.setVertexBuffer(0, this.glyphBuf!);
+    pass.draw(6, n);
+  }
+
   frame(rects: Rect[], texts: TextItem[], glass: GlassPanel[]) {
     const { cssWidth, cssHeight } = this.resize();
     const fbw = this.canvas.width;
@@ -462,29 +649,9 @@ export class Painter {
       this.device.queue.writeBuffer(instanceBuffer, 0, data);
     }
 
-    // text bind groups
-    const textEntries = texts.map((t) => this.getText(t));
-    while (this.textRectBuffers.length < texts.length) {
-      this.textRectBuffers.push(this.device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
-    }
-    const textBindGroups: GPUBindGroup[] = texts.map((t, i) => {
-      const e = textEntries[i];
-      const tc = t.clip;
-      this.device.queue.writeBuffer(this.textRectBuffers[i], 0, new Float32Array([t.x, t.y, e.cssW, e.cssH, tc ? tc[0] : 0, tc ? tc[1] : 0, tc ? tc[2] : 0, tc ? tc[3] : 0]));
-      return this.device.createBindGroup({
-        layout: this.textPipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: this.vpBuffer } },
-          { binding: 1, resource: { buffer: this.textRectBuffers[i] } },
-          { binding: 2, resource: this.sampler },
-          { binding: 3, resource: e.view },
-        ],
-      });
-    });
-
     const encoder = this.device.createCommandEncoder();
 
-    // PASS 1 — non-glass content -> backdrop texture
+    // PASS 1 — non-glass content (rects + glyphs) -> backdrop texture
     const p1 = encoder.beginRenderPass({
       colorAttachments: [{ view: this.backdropView!, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
     });
@@ -494,11 +661,7 @@ export class Painter {
       p1.setVertexBuffer(0, instanceBuffer);
       p1.draw(6, rects.length);
     }
-    textBindGroups.forEach((bg) => {
-      p1.setPipeline(this.textPipeline);
-      p1.setBindGroup(0, bg);
-      p1.draw(6);
-    });
+    this.drawGlyphs(p1, texts); // Gap B: per-glyph atlas instances
     p1.end();
 
     // PASS 2 — composite glass over the backdrop (ping-pong = glass-over-glass).
@@ -529,25 +692,6 @@ export class Painter {
     this.ensureBackdrop(fbw, fbh);
     this.device.queue.writeBuffer(this.vpBuffer, 0, new Float32Array([cssWidth, cssHeight, 0, 0, cam.tx, cam.ty, cam.scale, 0]));
 
-    const textEntries = texts.map((t) => this.getText(t));
-    while (this.textRectBuffers.length < texts.length) {
-      this.textRectBuffers.push(this.device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
-    }
-    const textBindGroups = texts.map((t, i) => {
-      const e = textEntries[i];
-      const tc = t.clip;
-      this.device.queue.writeBuffer(this.textRectBuffers[i], 0, new Float32Array([t.x, t.y, e.cssW, e.cssH, tc ? tc[0] : 0, tc ? tc[1] : 0, tc ? tc[2] : 0, tc ? tc[3] : 0]));
-      return this.device.createBindGroup({
-        layout: this.textPipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: this.vpBuffer } },
-          { binding: 1, resource: { buffer: this.textRectBuffers[i] } },
-          { binding: 2, resource: this.sampler },
-          { binding: 3, resource: e.view },
-        ],
-      });
-    });
-
     const encoder = this.device.createCommandEncoder();
     const p1 = encoder.beginRenderPass({
       colorAttachments: [{ view: this.backdropView!, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
@@ -558,11 +702,7 @@ export class Painter {
       p1.setVertexBuffer(0, this.nodeBuffer);
       p1.draw(6, this.nodeCount); // ALL 10k nodes — one instanced draw
     }
-    textBindGroups.forEach((bg) => {
-      p1.setPipeline(this.textPipeline);
-      p1.setBindGroup(0, bg);
-      p1.draw(6);
-    });
+    this.drawGlyphs(p1, texts); // Gap B: per-glyph atlas instances
     p1.end();
 
     // composite glass over the backdrop (ping-pong = glass-over-glass).
