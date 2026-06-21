@@ -21,6 +21,7 @@ export interface Style {
   absolute?: { x: number; y: number }; // take out of flow, place at viewport x/y
   background?: RGBA;
   radius?: number;
+  cornerSmoothing?: number; // 0 = round corners (default), 1 = squircle (superellipse)
   // text-only
   color?: RGBA;
   fontSize?: number;

@@ -49,7 +49,7 @@ export function collectRects(root: ElementNode, focusedId: number | null, cam: C
       out.push({ x: x - 4, y: y - 4, w: w + 8, h: h + 8, radius: ((s.radius ?? 0) + 4) * cam.scale, color: FOCUS_RING, clip });
     }
     if (s.background && !n.props.glass && !n.props.material) {
-      out.push({ x, y, w, h, radius: (s.radius ?? 0) * cam.scale, color: s.background, clip });
+      out.push({ x, y, w, h, radius: (s.radius ?? 0) * cam.scale, smoothing: s.cornerSmoothing, color: s.background, clip });
     }
     if (n.props.glass || n.props.material) return; // their children render in the FOREGROUND pass
     let childClip = clip;
@@ -107,7 +107,7 @@ export function collectForeground(root: ElementNode, cam: Camera): { rects: Rect
     const s = n.props.style ?? {};
     const x = n.x * cam.scale + cam.tx;
     const y = n.y * cam.scale + cam.ty;
-    if (s.background) rects.push({ x, y, w: n.w * cam.scale, h: n.h * cam.scale, radius: (s.radius ?? 0) * cam.scale, color: s.background });
+    if (s.background) rects.push({ x, y, w: n.w * cam.scale, h: n.h * cam.scale, radius: (s.radius ?? 0) * cam.scale, smoothing: s.cornerSmoothing, color: s.background });
     if (n.type === "text") {
       const size = (s.fontSize ?? 16) * cam.scale;
       const weight = s.fontWeight ?? 400;

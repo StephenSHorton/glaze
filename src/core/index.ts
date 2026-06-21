@@ -19,3 +19,6 @@ export type { Style, NodeProps, GlassSpec, MaterialSpec, Role, RGBA, Camera } fr
 // Live glass tuning (advanced): mutate glassTuning.params + flip .enabled to override
 // every glass panel at once; GLASS_DEFAULTS is the reset baseline.
 export { glassTuning, GLASS_DEFAULTS, type GlassParams } from "./glassTuning";
+
+// Spring-physics animation primitive (interruptible).
+export { useSpring, type SpringConfig } from "./useSpring";

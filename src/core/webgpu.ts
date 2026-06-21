@@ -13,6 +13,7 @@ export interface Rect {
   w: number;
   h: number;
   radius: number;
+  smoothing?: number; // 0 round … 1 squircle (superellipse corners)
   color: RGBA;
   clip?: ClipRect;
 }
@@ -104,10 +105,10 @@ struct VP { sizePad: vec4f, cam: vec4f };
 struct VSOut {
   @builtin(position) pos: vec4f,
   @location(0) local: vec2f, @location(1) half: vec2f, @location(2) radius: f32, @location(3) color: vec4f,
-  @location(4) screenPos: vec2f, @location(5) clip: vec4f,
+  @location(4) screenPos: vec2f, @location(5) clip: vec4f, @location(6) smoothing: f32,
 };
 const QUAD = array<vec2f, 6>(vec2f(0,0),vec2f(1,0),vec2f(0,1), vec2f(0,1),vec2f(1,0),vec2f(1,1));
-@vertex fn vs(@builtin(vertex_index) vi: u32, @location(0) rect: vec4f, @location(1) radius: f32, @location(2) color: vec4f, @location(3) clip: vec4f) -> VSOut {
+@vertex fn vs(@builtin(vertex_index) vi: u32, @location(0) rect: vec4f, @location(1) rad: vec2f, @location(2) color: vec4f, @location(3) clip: vec4f) -> VSOut {
   let q = QUAD[vi];
   let worldPx = rect.xy + q * rect.zw;
   let screenPx = worldPx * vp.cam.z + vp.cam.xy;
@@ -115,11 +116,18 @@ const QUAD = array<vec2f, 6>(vec2f(0,0),vec2f(1,0),vec2f(0,1), vec2f(0,1),vec2f(
   let ndc = vec2f(screenPx.x/size.x*2.0-1.0, -(screenPx.y/size.y*2.0-1.0));
   var o: VSOut;
   o.pos = vec4f(ndc,0,1); o.local = (q-0.5)*rect.zw; o.half = rect.zw*0.5;
-  o.radius = min(radius, min(o.half.x, o.half.y)); o.color = color;
+  o.radius = min(rad.x, min(o.half.x, o.half.y)); o.color = color;
+  o.smoothing = rad.y;
   o.screenPos = screenPx; o.clip = clip;
   return o;
 }
 fn sdRoundBox(p: vec2f, b: vec2f, r: f32) -> f32 { let q = abs(p)-b+vec2f(r); return length(max(q,vec2f(0.0)))+min(max(q.x,q.y),0.0)-r; }
+// Superellipse (squircle) corner: n=2 == round box; higher n == Apple-style continuous corners.
+fn sdSuperellipse(p: vec2f, b: vec2f, r: f32, n: f32) -> f32 {
+  let q = abs(p) - b + vec2f(r);
+  let m = max(q, vec2f(0.0));
+  return min(max(q.x, q.y), 0.0) + pow(pow(m.x, n) + pow(m.y, n), 1.0 / n) - r;
+}
 // Clip rect alpha (CSS px), ~1px AA. clip.z<=0 => no clip.
 fn clipAlpha(p: vec2f, clip: vec4f) -> f32 {
   if (clip.z <= 0.0) { return 1.0; }
@@ -129,7 +137,8 @@ fn clipAlpha(p: vec2f, clip: vec4f) -> f32 {
   return ax * ay;
 }
 @fragment fn fs(in: VSOut) -> @location(0) vec4f {
-  let d = sdRoundBox(in.local, in.half, in.radius);
+  let n = 2.0 + in.smoothing * 3.0; // 0 -> round (n=2), 1 -> squircle (n=5)
+  let d = sdSuperellipse(in.local, in.half, in.radius, n);
   let aa = fwidth(d);
   let a = in.color.a * (1.0 - smoothstep(-aa, aa, d)) * clipAlpha(in.screenPos, in.clip);
   return vec4f(in.color.rgb * a, a);
@@ -410,7 +419,7 @@ export class Painter {
             stepMode: "instance",
             attributes: [
               { shaderLocation: 0, offset: 0, format: "float32x4" }, // rect
-              { shaderLocation: 1, offset: 16, format: "float32" }, // radius
+              { shaderLocation: 1, offset: 16, format: "float32x2" }, // radius, cornerSmoothing
               { shaderLocation: 2, offset: 32, format: "float32x4" }, // color
               { shaderLocation: 3, offset: 48, format: "float32x4" }, // clip
             ],
@@ -670,7 +679,7 @@ export class Painter {
     rects.forEach((r, i) => {
       const o = i * FLOATS_PER_RECT;
       data[o] = r.x; data[o + 1] = r.y; data[o + 2] = r.w; data[o + 3] = r.h;
-      data[o + 4] = r.radius;
+      data[o + 4] = r.radius; data[o + 5] = r.smoothing ?? 0;
       data[o + 8] = r.color[0]; data[o + 9] = r.color[1]; data[o + 10] = r.color[2]; data[o + 11] = r.color[3];
       if (r.clip) { data[o + 12] = r.clip[0]; data[o + 13] = r.clip[1]; data[o + 14] = r.clip[2]; data[o + 15] = r.clip[3]; }
     });
