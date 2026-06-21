@@ -31,8 +31,13 @@ interface GNode {
   label: string;
 }
 
-export async function runStress(canvas: HTMLCanvasElement, a11yHost: HTMLElement) {
+export async function runStress(canvas: HTMLCanvasElement) {
   const painter = await Painter.create(canvas);
+
+  // Invisible semantics overlay, placed over the canvas (self-contained example).
+  const a11yHost = document.createElement("div");
+  Object.assign(a11yHost.style, { position: "absolute", inset: "0", pointerEvents: "none" } as Partial<CSSStyleDeclaration>);
+  (canvas.parentElement ?? document.body).appendChild(a11yHost);
 
   // Build nodes + the static WORLD-space instance buffer (uploaded once).
   const nodes: GNode[] = [];

@@ -3,25 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GPU UI · proof of loop</title>
+    <title>Kussetsu</title>
     <style>
       html, body { margin: 0; height: 100%; background: #0a0b12; overflow: hidden; }
-      /* The stage stacks the GPU canvas (paint) and the invisible semantics
-         overlay (a11y + input) in the exact same box. */
+      /* A positioned stage holding the GPU canvas. createGpuRoot() places its own
+         invisible semantics/input overlay over the canvas inside this stage. */
       #stage { position: relative; width: 100vw; height: 100vh; }
       /* Both dimensions pinned so the canvas's attribute-derived aspect-ratio
          can't leak into layout (the classic feedback-loop gotcha). */
       #gpu { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-      #a11y { position: absolute; inset: 0; }
-      /* The overlay container is transparent and lets pointer events fall
-         through to nothing by default; individual proxies opt back IN. */
-      #a11y { pointer-events: none; }
     </style>
   </head>
   <body>
     <div id="stage">
       <canvas id="gpu"></canvas>
-      <div id="a11y"></div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
