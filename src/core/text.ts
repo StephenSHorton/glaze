@@ -50,9 +50,17 @@ function buildLine(text: string, startOffset: number, y: number, height: number,
   return { text, startOffset, endOffset: startOffset + text.length, y, height, xs };
 }
 
+// Cache wrap results — the O(n²) prefix-measure per line is the cost, and the same
+// (text, width, font) recurs every layout pass (especially with page-wide text selection,
+// which wraps ALL text). Results are immutable, so sharing them is safe.
+const wrapCache = new Map<string, WrapResult>();
+
 /** Greedy word-wrap at maxWidth, splitting on explicit newlines. Offsets are
  *  global into `text`. (Long single words overflow rather than break — rare in UI.) */
 export function wrapText(text: string, maxWidth: number, s: Style): WrapResult {
+  const key = `${s.fontSize ?? 16}|${s.fontWeight ?? 400}|${Math.round(maxWidth)}|${text}`;
+  const hit = wrapCache.get(key);
+  if (hit) return hit;
   const lineHeight = Math.round((s.fontSize ?? 16) * 1.45);
   const lines: VisualLine[] = [];
   let offset = 0;
@@ -74,7 +82,10 @@ export function wrapText(text: string, maxWidth: number, s: Style): WrapResult {
     offset = p + 1; // skip the '\n'
   }
   const width = lines.reduce((mx, l) => Math.max(mx, l.xs[l.xs.length - 1] ?? 0), 0);
-  return { lines, width: Math.ceil(width), height: lines.length * lineHeight };
+  const result = { lines, width: Math.ceil(width), height: lines.length * lineHeight };
+  if (wrapCache.size > 2000) wrapCache.clear();
+  wrapCache.set(key, result);
+  return result;
 }
 
 /** Pointer (local px) -> caret offset. Pick line by y, binary-search xs. */

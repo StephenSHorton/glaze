@@ -11,6 +11,9 @@ import { type ElementNode, type Style, textOf } from "./scene";
 import { measureText } from "./layout";
 import { wrapText } from "./text";
 
+// When true, every text node keeps full wrap geometry so page-wide text selection works.
+let selectableAll = false;
+
 // Yoga calls the measure func 2-4x per text node per pass — memoize it (this, not
 // Yoga's C++ core, is the 60fps cliff).
 const measureCache = new Map<string, { w: number; h: number }>();
@@ -67,7 +70,7 @@ function build(scene: ElementNode): YogaNode {
       if (constrained) {
         const single = measure(str, st);
         // selectable text always keeps wrap geometry (so even single-line is selectable)
-        if (!scene.props.selectable && single.w <= availW && !str.includes("\n")) {
+        if (!scene.props.selectable && !selectableAll && single.w <= availW && !str.includes("\n")) {
           scene.wrapped = undefined; // fits on one line
           return { width: widthMode === MeasureMode.Exactly ? availW : single.w, height: single.h };
         }
@@ -108,7 +111,8 @@ function writeBack(scene: ElementNode, yn: YogaNode, absL: number, absT: number)
 }
 
 /** Lay out `root` to fill (vw, vh) using Yoga, writing x/y/w/h onto every node. */
-export function layoutWithYoga(root: ElementNode, vw: number, vh: number): void {
+export function layoutWithYoga(root: ElementNode, vw: number, vh: number, allSelectable = false): void {
+  selectableAll = allSelectable;
   const yRoot = build(root);
   yRoot.setWidth(vw);
   yRoot.setHeight(vh);

@@ -19,6 +19,7 @@ import {
   collectScrollRegions,
   collectSelection,
   collectSelectable,
+  selectionToText,
   collectEditable,
   editCaretRect,
   type ScrollRegion,
@@ -34,6 +35,8 @@ export interface GpuRootOptions {
   camera?: boolean;
   /** Wheel scrolls the whole page vertically (clamped to content). Default false. */
   pageScroll?: boolean;
+  /** Make ALL text drag-selectable + copyable (Cmd/Ctrl+C), like a normal page. Default false. */
+  textSelectable?: boolean;
 }
 
 export interface GpuRoot {
@@ -50,7 +53,7 @@ export interface GpuRoot {
 /** Create a Kussetsu root that paints `canvas` on the GPU and bridges a11y + input.
  *  `canvas` must live inside a positioned parent (the overlay is placed over it). */
 export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootOptions = {}): Promise<GpuRoot> {
-  const opts = { camera: true, pageScroll: false, ...options };
+  const opts = { camera: true, pageScroll: false, textSelectable: false, ...options };
 
   // Real layout (Yoga, WASM). Dynamic import keeps it out of bundles that lay nothing out.
   const { layoutWithYoga } = await import("./yogaLayout");
@@ -153,8 +156,27 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
   let panning = false;
   let panX = 0;
   let panY = 0;
-  const caretAt = (r: SelectableRegion, e: PointerEvent) =>
-    hitTest(r.node.wrapped!.result, (e.offsetX - r.x) / r.scale, (e.offsetY - r.y) / r.scale);
+  // Locate the text node + caret offset under a screen point. Exact hit if over a region;
+  // otherwise the nearest region by vertical distance (so a drag through gaps still extends
+  // the selection to the closest text). Returns null only if there are no selectable texts.
+  const locate = (px: number, py: number): { id: number; offset: number } | null => {
+    for (let i = selectables.length - 1; i >= 0; i--) {
+      const r = selectables[i];
+      if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) {
+        return { id: r.id, offset: hitTest(r.node.wrapped!.result, (px - r.x) / r.scale, (py - r.y) / r.scale) };
+      }
+    }
+    let best: SelectableRegion | null = null;
+    let bestD = Infinity;
+    for (const r of selectables) {
+      const d = Math.abs(py - Math.max(r.y, Math.min(py, r.y + r.h)));
+      if (d < bestD) { bestD = d; best = r; }
+    }
+    if (!best) return null;
+    const lx = Math.max(0, Math.min(best.w, px - best.x)) / best.scale;
+    const ly = Math.max(0, Math.min(best.h - 1, py - best.y)) / best.scale;
+    return { id: best.id, offset: hitTest(best.node.wrapped!.result, lx, ly) };
+  };
 
   const onPointerDown = (e: PointerEvent) => {
     // Clicking an editable field focuses the hidden <input> (keyboard + IME).
@@ -176,17 +198,19 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
         return;
       }
     }
-    // Clicking selectable text starts a selection (takes precedence over pan).
-    for (let i = selectables.length - 1; i >= 0; i--) {
-      const r = selectables[i];
-      if (e.offsetX >= r.x && e.offsetX <= r.x + r.w && e.offsetY >= r.y && e.offsetY <= r.y + r.h) {
-        const off = caretAt(r, e);
-        selection = { nodeId: r.id, anchor: off, focus: off };
+    // Pressing on text starts a selection (takes precedence over pan). Only when the press
+    // actually lands on a region — a press on empty space clears any selection and falls through.
+    if (selectables.length) {
+      const overText = selectables.some((r) => e.offsetX >= r.x && e.offsetX <= r.x + r.w && e.offsetY >= r.y && e.offsetY <= r.y + r.h);
+      if (overText) {
+        const hit = locate(e.offsetX, e.offsetY)!;
+        selection = { anchorId: hit.id, anchorOffset: hit.offset, focusId: hit.id, focusOffset: hit.offset };
         selecting = true;
         canvas.setPointerCapture(e.pointerId);
         container.dirty = true;
         return;
       }
+      if (selection) { selection = null; container.dirty = true; } // click off text clears the selection
     }
     if (opts.camera) {
       panning = true;
@@ -199,9 +223,9 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
     lastPointer = [e.offsetX, e.offsetY];
     if (materialsPresent) container.dirty = true; // pointer-reactive shaders repaint
     if (selecting && selection) {
-      const r = selectables.find((s) => s.id === selection!.nodeId);
-      if (r) {
-        selection = { ...selection, focus: caretAt(r, e) };
+      const hit = locate(e.offsetX, e.offsetY);
+      if (hit) {
+        selection = { ...selection, focusId: hit.id, focusOffset: hit.offset };
         container.dirty = true;
       }
       return;
@@ -263,6 +287,18 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
   canvas.addEventListener("pointercancel", endPan);
   host.addEventListener("wheel", onWheel, { passive: false }); // on host so it also catches wheel over a11y proxies
 
+  // Cmd/Ctrl+C copies the painted text selection to the real clipboard (the selection is
+  // GPU-painted, so the browser's native copy has nothing to grab). Skip while editing a
+  // field, so the input's own copy works.
+  const onCopy = (e: KeyboardEvent) => {
+    if (!((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") || editingId != null || !selection) return;
+    const text = selectionToText(selectables, selection);
+    if (!text) return;
+    e.preventDefault();
+    navigator.clipboard?.writeText(text).catch(() => {});
+  };
+  window.addEventListener("keydown", onCopy);
+
   const rootElement = (): ElementNode | null =>
     (container.children.find((c) => c.kind === "element") as ElementNode | undefined) ?? null;
 
@@ -270,7 +306,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
     const root = rootElement();
     if (!root) return;
     const { cssWidth, cssHeight } = painter.size();
-    layoutWithYoga(root, cssWidth, cssHeight);
+    layoutWithYoga(root, cssWidth, cssHeight, opts.textSelectable);
     viewportH = cssHeight;
     if (opts.pageScroll) {
       contentBottom = 0;
@@ -282,10 +318,10 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
       measureBottom(root);
     }
     scrollRegions = collectScrollRegions(root, camera, scrollY);
-    selectables = collectSelectable(root, camera);
+    selectables = collectSelectable(root, camera, opts.textSelectable);
     editables = collectEditable(root, camera);
     const fg = collectForeground(root, camera); // glass children, drawn ON the glass
-    const rects = [...collectRects(root, focusedId, camera, scrollY), ...collectSelection(root, selection, camera)];
+    const rects = [...collectRects(root, focusedId, camera, scrollY), ...collectSelection(selectables, selection)];
     if (editingId != null) {
       const r = editables.find((e) => e.id === editingId);
       if (r) {
@@ -345,6 +381,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
       canvas.removeEventListener("pointerup", endPan);
       canvas.removeEventListener("pointercancel", endPan);
       host.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onCopy);
       reactRoot.unmount();
       a11yHost.remove();
       editInput.remove();

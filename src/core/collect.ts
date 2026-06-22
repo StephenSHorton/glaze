@@ -4,7 +4,7 @@
 import { type Camera, type ElementNode, type RGBA, firstText, textOf } from "./scene";
 import type { ClipRect, GlassPanel, MaterialPanel, Rect, TextItem } from "./webgpu";
 import type { SemNode } from "./a11y";
-import { caretRect, measureWidth, selectionRects } from "./text";
+import { measureWidth, selectionRects } from "./text";
 import { glassTuning } from "./glassTuning";
 
 const FOCUS_RING: RGBA = [0.35, 0.95, 1.0, 1];
@@ -13,9 +13,10 @@ const SELECTION_COLOR: RGBA = [0.3, 0.46, 0.96, 0.4];
 const CARET_COLOR: RGBA = [0.96, 0.98, 1, 1];
 
 export interface Selection {
-  nodeId: number;
-  anchor: number;
-  focus: number;
+  anchorId: number; // where the drag started (scene node id)
+  anchorOffset: number;
+  focusId: number; // where it is now
+  focusOffset: number;
 }
 export interface SelectableRegion {
   id: number;
@@ -232,29 +233,54 @@ export interface ScrollRegion {
   maxScroll: number; // world px
 }
 
-/** Selection highlight bands + caret as screen rects (drawn behind/with the text). */
-export function collectSelection(root: ElementNode, selection: Selection | null, cam: Camera): Rect[] {
+// Document order = the order collectSelectable() emits regions (tree pre-order). Resolve
+// anchor/focus to a forward [start..end] range over that ordering.
+function orderedRange(selectables: SelectableRegion[], sel: Selection) {
+  const ai = selectables.findIndex((r) => r.id === sel.anchorId);
+  const fi = selectables.findIndex((r) => r.id === sel.focusId);
+  if (ai < 0 || fi < 0) return null;
+  const forward = ai < fi || (ai === fi && sel.anchorOffset <= sel.focusOffset);
+  return forward
+    ? { startI: ai, startOff: sel.anchorOffset, endI: fi, endOff: sel.focusOffset }
+    : { startI: fi, startOff: sel.focusOffset, endI: ai, endOff: sel.anchorOffset };
+}
+
+/** Selection highlight bands across ALL spanned text nodes (cross-block), in screen px. */
+export function collectSelection(selectables: SelectableRegion[], selection: Selection | null): Rect[] {
   if (!selection) return [];
-  let node: ElementNode | null = null;
-  const find = (n: ElementNode) => {
-    if (node) return;
-    if (n.id === selection.nodeId) {
-      node = n;
-      return;
-    }
-    for (const c of n.children) if (c.kind === "element") find(c);
-  };
-  find(root);
-  if (!node || !node.wrapped) return [];
-  const nd: ElementNode = node;
+  const range = orderedRange(selectables, selection);
+  if (!range) return [];
   const out: Rect[] = [];
-  const s = cam.scale;
-  for (const r of selectionRects(nd.wrapped!.result, selection.anchor, selection.focus)) {
-    out.push({ x: (nd.x + r.x) * s + cam.tx, y: (nd.y + r.y) * s + cam.ty, w: r.w * s, h: r.h * s, radius: 2 * s, color: SELECTION_COLOR });
+  for (let i = range.startI; i <= range.endI; i++) {
+    const r = selectables[i];
+    if (!r.node.wrapped) continue;
+    const len = textOf(r.node).length;
+    const from = i === range.startI ? range.startOff : 0;
+    const to = i === range.endI ? range.endOff : len;
+    for (const rect of selectionRects(r.node.wrapped.result, from, to)) {
+      out.push({ x: r.x + rect.x * r.scale, y: r.y + rect.y * r.scale, w: rect.w * r.scale, h: rect.h * r.scale, radius: 2 * r.scale, color: SELECTION_COLOR });
+    }
   }
-  const c = caretRect(nd.wrapped!.result, selection.focus);
-  out.push({ x: (nd.x + c.x) * s + cam.tx, y: (nd.y + c.y) * s + cam.ty, w: Math.max(1.5, c.w * s), h: c.h * s, radius: 0, color: CARET_COLOR });
   return out;
+}
+
+/** The selected text in document order (newline between visual rows) — for the clipboard. */
+export function selectionToText(selectables: SelectableRegion[], selection: Selection | null): string {
+  if (!selection) return "";
+  const range = orderedRange(selectables, selection);
+  if (!range) return "";
+  let text = "";
+  let prevY: number | null = null;
+  for (let i = range.startI; i <= range.endI; i++) {
+    const r = selectables[i];
+    const str = textOf(r.node);
+    const from = i === range.startI ? range.startOff : 0;
+    const to = i === range.endI ? range.endOff : str.length;
+    if (prevY !== null && Math.abs(r.y - prevY) > 2) text += "\n"; // different visual row
+    text += str.slice(from, to);
+    prevY = r.y;
+  }
+  return text;
 }
 
 export interface EditableRegion {
@@ -301,11 +327,12 @@ export function editCaretRect(region: EditableRegion, caretOffset: number, cam: 
   return { x: cx, y: t.y * cam.scale + cam.ty, w: Math.max(1.5, 1.5 * cam.scale), h: t.h * cam.scale, radius: 0, color: CARET_COLOR };
 }
 
-/** Selectable text regions (screen rects) for click->caret hit-testing. */
-export function collectSelectable(root: ElementNode, cam: Camera): SelectableRegion[] {
+/** Selectable text regions (screen rects), in document order. `all` makes every text node
+ *  selectable (page-wide selection); otherwise only nodes with the `selectable` prop. */
+export function collectSelectable(root: ElementNode, cam: Camera, all = false): SelectableRegion[] {
   const out: SelectableRegion[] = [];
   const walk = (n: ElementNode) => {
-    if (n.type === "text" && n.props.selectable && n.wrapped) {
+    if (n.type === "text" && (all || n.props.selectable) && n.wrapped) {
       out.push({ id: n.id, x: n.x * cam.scale + cam.tx, y: n.y * cam.scale + cam.ty, w: n.w * cam.scale, h: n.h * cam.scale, node: n, scale: cam.scale });
     }
     for (const c of n.children) if (c.kind === "element") walk(c);
