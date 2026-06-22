@@ -40,6 +40,9 @@ export interface GpuRootOptions {
   pageScroll?: boolean;
   /** Make ALL text drag-selectable + copyable (Cmd/Ctrl+C), like a normal page. Default false. */
   textSelectable?: boolean;
+  /** Full-screen WGSL background shader (`fn material(uv,px)->vec4f`) rendered into the backdrop,
+   *  so glass refracts it. Same template/helpers as props.material. */
+  background?: string;
 }
 
 export interface GpuRoot {
@@ -61,6 +64,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
   // Real layout (Yoga, WASM). Dynamic import keeps it out of bundles that lay nothing out.
   const { layoutWithYoga } = await import("./yogaLayout");
   const painter = await Painter.create(canvas);
+  painter.setBackground(opts.background ?? null);
 
   const host = canvas.parentElement ?? document.body;
   const container: Container = { kind: "container", canvas, children: [], dirty: true };
@@ -391,6 +395,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
     // animated materials + particles drive a continuous repaint loop
     if (materialsPresent && materials.some((m) => m.animated)) container.dirty = true;
     if (particlesPresent) container.dirty = true;
+    if (opts.background) container.dirty = true; // animated background shader
   }
 
   let rafId = 0;

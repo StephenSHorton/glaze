@@ -482,6 +482,10 @@ export class Painter {
   private materialBGL!: GPUBindGroupLayout;
   private materialPL!: GPUPipelineLayout;
 
+  // A full-screen background shader rendered INTO the backdrop (pass 0) so glass refracts it.
+  private bgShader: string | null = null;
+  private bgBuffer!: GPUBuffer;
+
   // Particles: one instanced additive draw for the whole field (shares the rect camera).
   private particlePipeline!: GPURenderPipeline;
   private particleVpBindGroup!: GPUBindGroup;
@@ -659,6 +663,7 @@ export class Painter {
     this.bloomExtractU = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     // 32 bytes: CU's `pad: vec3f` forces 16-byte alignment, so the struct rounds up to 32.
     this.bloomCompositeU = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.bgBuffer = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }); // background-shader MU
   }
 
   size(): { cssWidth: number; cssHeight: number } {
@@ -937,6 +942,12 @@ export class Painter {
     pc.end();
   }
 
+  /** Set a full-screen background shader (a `fn material(uv,px)->vec4f`, same template as
+   *  props.material) rendered into the backdrop, so glass + everything composites over it. */
+  setBackground(shader: string | null) {
+    this.bgShader = shader;
+  }
+
   frame(rects: Rect[], texts: TextItem[], glass: GlassPanel[], fg?: { rects: Rect[]; texts: TextItem[] }, materials?: MaterialPanel[], info?: FrameInfo) {
     const { cssWidth, cssHeight } = this.resize();
     const fbw = this.canvas.width;
@@ -956,9 +967,29 @@ export class Painter {
     const post = info?.post ?? null;
     const finalView = post ? this.sceneView! : canvasView;
 
-    // PASS 1 — non-glass content (rects + glyphs) -> backdrop texture
+    // PASS 0 — full-screen background shader INTO the backdrop, so glass refracts it. Uses the
+    // material template (full-screen rect, radius 0); binding 2 is a dummy (it self-generates).
+    if (this.bgShader) {
+      const pipeline = this.getMaterialPipeline(this.bgShader);
+      const a = new Float32Array(32);
+      a[0] = 0; a[1] = 0; a[2] = cssWidth; a[3] = cssHeight; // rect = full screen
+      a[4] = cssWidth; a[5] = cssHeight; a[6] = dpr; a[7] = info?.time ?? 0; // res + time
+      a[8] = info?.pointer?.[0] ?? 0; a[9] = info?.pointer?.[1] ?? 0; a[10] = 0; a[11] = 0;
+      this.device.queue.writeBuffer(this.bgBuffer, 0, a);
+      const bg = this.device.createBindGroup({
+        layout: this.materialBGL,
+        entries: [{ binding: 0, resource: { buffer: this.bgBuffer } }, { binding: 1, resource: this.sampler }, { binding: 2, resource: this.backdropView2! }],
+      });
+      const p0 = encoder.beginRenderPass({ colorAttachments: [{ view: this.backdropView!, clearValue: { r: 0, g: 0, b: 0, a: 1 }, loadOp: "clear", storeOp: "store" }] });
+      p0.setPipeline(pipeline);
+      p0.setBindGroup(0, bg);
+      p0.draw(6);
+      p0.end();
+    }
+
+    // PASS 1 — non-glass content (rects + glyphs) -> backdrop texture (load on top of bg if any)
     const p1 = encoder.beginRenderPass({
-      colorAttachments: [{ view: this.backdropView!, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: "clear", storeOp: "store" }],
+      colorAttachments: [{ view: this.backdropView!, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: this.bgShader ? "load" : "clear", storeOp: "store" }],
     });
     if (instanceBuffer) {
       p1.setPipeline(this.rectPipeline);
