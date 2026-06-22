@@ -194,47 +194,73 @@ function MigratedCard() {
   );
 }
 
-const CODE: { text: string; kind?: "tag" | "attr" | "str" }[][] = [
+type CodeSeg = { text: string; kind?: "tag" | "attr" | "str" | "const" };
+type CodeLine = CodeSeg[];
+const CODE_COLOR: Record<string, RGBA> = { tag: [0.55, 0.62, 0.95, 1], str: [0.45, 0.78, 0.6, 1], attr: [0.92, 0.7, 0.45, 1], const: [0.82, 0.6, 0.98, 1] };
+
+// The SAME card, two ways. Left: HTML + Tailwind (what you'd usually write). Right: kussetsu's
+// native vocabulary — <view>/<text> + a style object, no cascade. compat maps left -> right.
+const TAILWIND_CODE: CodeLine[] = [
   [{ text: "<div ", kind: "tag" }, { text: 'className="flex-col p-5', kind: "str" }],
-  [{ text: '       rounded-2xl bg-slate-800"', kind: "str" }, { text: ">" }],
+  [{ text: '      rounded-2xl bg-slate-800"', kind: "str" }, { text: ">" }],
   [{ text: "  <div ", kind: "tag" }, { text: 'className="flex-row', kind: "str" }],
-  [{ text: '              items-center gap-3"', kind: "str" }, { text: ">" }],
+  [{ text: '             items-center gap-3"', kind: "str" }, { text: ">" }],
   [{ text: "    <div ", kind: "tag" }, { text: 'className="rounded-full', kind: "str" }],
-  [{ text: '                bg-indigo-500" />', kind: "str" }],
+  [{ text: '               bg-indigo-500" />', kind: "str" }],
   [{ text: "    <h3 ", kind: "tag" }, { text: 'className="text-lg', kind: "str" }],
-  [{ text: '             font-bold text-white"', kind: "str" }, { text: ">Ada</h3>" }],
+  [{ text: '            font-bold text-white"', kind: "str" }, { text: ">Ada</h3>" }],
   [{ text: "  </div>", kind: "tag" }],
-  [{ text: "  <button ", kind: "tag" }, { text: "onClick", kind: "attr" }, { text: "={toggle}", kind: "str" }, { text: ">" }],
-  [{ text: "    <span>", kind: "tag" }, { text: "{following ? 'Following' : 'Follow'}" }],
-  [{ text: "  </span></button>", kind: "tag" }],
+  [{ text: "  <button ", kind: "tag" }, { text: "className=", kind: "str" }, { text: '"rounded-lg', kind: "str" }],
+  [{ text: '            bg-indigo-600"', kind: "str" }, { text: ">Follow" }],
+  [{ text: "  </button>", kind: "tag" }],
   [{ text: "</div>", kind: "tag" }],
 ];
-const CODE_COLOR: Record<string, RGBA> = { tag: [0.55, 0.62, 0.95, 1], str: [0.45, 0.78, 0.6, 1], attr: [0.92, 0.7, 0.45, 1] };
 
-function MigrateSection({ vw }: { vw: number }) {
-  const colsW = Math.min(900, vw - 120);
+const NATIVE_CODE: CodeLine[] = [
+  [{ text: "<view ", kind: "tag" }, { text: "style={{ direction: " }, { text: "'column'", kind: "str" }, { text: "," }],
+  [{ text: "       padding: 20, radius: 16," }],
+  [{ text: "       background: " }, { text: "SLATE", kind: "const" }, { text: ", gap: 14 }}>" }],
+  [{ text: "  <view ", kind: "tag" }, { text: "style={{ direction: " }, { text: "'row'", kind: "str" }, { text: "," }],
+  [{ text: "         align: " }, { text: "'center'", kind: "str" }, { text: ", gap: 12 }}>" }],
+  [{ text: "    <view ", kind: "tag" }, { text: "style={{ radius: 23," }],
+  [{ text: "           background: " }, { text: "INDIGO", kind: "const" }, { text: " }} />" }],
+  [{ text: "    <text ", kind: "tag" }, { text: "style={{ fontWeight: 700," }],
+  [{ text: "           color: " }, { text: "WHITE", kind: "const" }, { text: " }}>Ada</text>" }],
+  [{ text: "  </view>", kind: "tag" }],
+  [{ text: "  <view ", kind: "tag" }, { text: "role", kind: "attr" }, { text: "='button'", kind: "str" }, { text: ">Follow" }],
+  [{ text: "  </view>", kind: "tag" }],
+  [{ text: "</view>", kind: "tag" }],
+];
+
+function CodeCol({ label, accent, code, w }: { label: string; accent: RGBA; code: CodeLine[]; w: number }) {
   return (
-    <view style={{ width: "stretch", height: 700, direction: "column", background: INK }}>
-      <Heading title="Migrate your React" sub="Point the build at existing React and kussetsu/compat tag-aliases the HTML + maps a Tailwind subset onto the GPU vocabulary — and fails loud on anything it can't paint. The card on the right is the code on the left, transformed at build time." />
-      <view style={{ grow: 1, width: "stretch", direction: "row", align: "center", justify: "center", gap: 40 }}>
-        {/* left: the source you write */}
-        <view style={{ width: Math.round(colsW * 0.56), direction: "column", gap: 10 }}>
-          <text style={{ fontSize: 13, fontWeight: 700, color: FAINT }}>YOU WRITE — plain HTML + Tailwind</text>
-          <view style={{ width: "stretch", radius: 14, cornerSmoothing: 0.6, background: [0.06, 0.07, 0.12, 1], padding: 22, direction: "column", gap: 3 }}>
-            {CODE.map((line, i) => (
-              <view key={i} style={{ direction: "row" }}>
-                {line.map((seg, j) => (
-                  <text key={j} style={{ fontSize: 13.5, fontWeight: 500, color: seg.kind ? CODE_COLOR[seg.kind] : [0.78, 0.82, 0.92, 1] }}>{seg.text}</text>
-                ))}
-              </view>
+    <view style={{ width: w, direction: "column", gap: 10 }}>
+      <text style={{ fontSize: 13, fontWeight: 700, color: accent }}>{label}</text>
+      <view style={{ width: "stretch", grow: 1, radius: 14, cornerSmoothing: 0.6, background: [0.06, 0.07, 0.12, 1], padding: 20, direction: "column", gap: 3 }}>
+        {code.map((line, i) => (
+          <view key={i} style={{ direction: "row" }}>
+            {line.map((seg, j) => (
+              <text key={j} style={{ fontSize: 13, fontWeight: 500, color: seg.kind ? CODE_COLOR[seg.kind] : [0.78, 0.82, 0.92, 1] }}>{seg.text}</text>
             ))}
           </view>
-        </view>
-        {/* right: the live GPU result (same code, compiled) */}
-        <view style={{ direction: "column", gap: 10, align: "start" }}>
-          <text style={{ fontSize: 13, fontWeight: 700, color: FAINT }}>KUSSETSU RENDERS — on the GPU, accessible</text>
-          <MigratedCard />
-        </view>
+        ))}
+      </view>
+    </view>
+  );
+}
+
+function MigrateSection({ vw }: { vw: number }) {
+  const colW = Math.min(440, (Math.min(980, vw - 80) - 30) / 2);
+  return (
+    <view style={{ width: "stretch", height: 820, direction: "column", background: INK }}>
+      <Heading title="Native vocabulary vs. the familiar way" sub="The same card, written two ways: the HTML + Tailwind you'd usually reach for, and kussetsu's native vocabulary — <view>/<text> with a plain style object, no cascade. kussetsu/compat maps the left onto the right at build time, so you can migrate an existing React app incrementally, then drop to native where you want to go beyond CSS. Both paint the identical result below." />
+      <view style={{ width: "stretch", direction: "row", align: "start", justify: "center", gap: 30 }}>
+        <CodeCol label="HTML + TAILWIND — the familiar way" accent={[0.5, 0.78, 0.62, 1]} code={TAILWIND_CODE} w={colW} />
+        <CodeCol label="KUSSETSU — the native vocabulary" accent={[0.66, 0.66, 0.98, 1]} code={NATIVE_CODE} w={colW} />
+      </view>
+      <view style={{ grow: 1, width: "stretch", direction: "column", align: "center", justify: "center", gap: 12 }}>
+        <text style={{ fontSize: 13, fontWeight: 700, color: FAINT }}>↓ BOTH COMPILE TO THIS — PAINTED ON THE GPU, ACCESSIBLE</text>
+        <MigratedCard />
       </view>
     </view>
   );
