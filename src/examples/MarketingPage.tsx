@@ -167,7 +167,10 @@ function Nav({ vw }: { vw: number }) {
   const w = Math.min(MAXW, vw - EDGE * 2);
   return (
     <view glass={NAV_GLASS} style={{ absolute: { x: Math.round((vw - w) / 2), y: EDGE }, width: w, height: NAV_H, radius: 18, cornerSmoothing: 0.7, direction: "row", align: "center", padding: 20, gap: 4 }}>
-      <text style={{ fontSize: 21, fontWeight: 800, color: INK }}>Kussetsu</text>
+      <view style={{ direction: "row", align: "center", gap: 9 }}>
+        <text style={{ fontSize: 21, fontWeight: 800, color: INK }}>Kussetsu</text>
+        <text style={{ fontSize: 18, fontWeight: 500, color: SLATE }}>屈折</text>
+      </view>
       <view style={{ grow: 1 }} />
       <view style={{ direction: "row", align: "center", gap: 6 }}>
         <NavLink label="Demo" onActivate={goDemo} />
@@ -208,11 +211,9 @@ function Hero({ vw, vh }: { vw: number; vh: number }) {
   const cubeMid = cubeY + cube / 2;
   return (
     <view style={{ width: "stretch", height: h }}>
-      {/* headline — centered ON the cube so the cube refracts the big type */}
-      <view style={{ absolute: { x: 0, y: Math.round(cubeMid - 78) }, width: vw, direction: "row", justify: "center" }}>
-        <view style={{ width: Math.min(880, vw - 80), direction: "column", align: "center" }}>
-          <text role="heading" level={1} style={{ fontSize: 66, fontWeight: 800, color: INK }}>Interfaces, painted on the GPU.</text>
-        </view>
+      {/* one big word, wider than the cube so its ends read while the cube refracts the centre */}
+      <view style={{ absolute: { x: 0, y: Math.round(cubeMid - 142) }, width: vw, direction: "row", justify: "center" }}>
+        <text role="heading" level={1} style={{ fontSize: 240, fontWeight: 800, color: INK }}>GLASS</text>
       </view>
       {/* a rotating rounded glass cube ray-traced in a shader — overlaps & refracts the headline */}
       <view material={{ shader: GLASS_CUBE, backdrop: true, animated: true, uniforms: cubeUniforms }} style={{ absolute: { x: Math.round(cx - cube / 2), y: cubeY }, width: cube, height: cube }} />
