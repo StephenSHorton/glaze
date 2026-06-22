@@ -136,15 +136,15 @@ export function collectForeground(root: ElementNode, cam: Camera, scroll: Scroll
   return { rects, texts };
 }
 
-/** Custom-shader fill nodes (props.material) → flat panel list (camera-applied). */
-export function collectMaterials(root: ElementNode, cam: Camera): MaterialPanel[] {
+/** Custom-shader fill nodes (props.material) → flat panel list (camera + scroll applied). */
+export function collectMaterials(root: ElementNode, cam: Camera, scroll: ScrollMap): MaterialPanel[] {
   const out: MaterialPanel[] = [];
-  const walk = (n: ElementNode) => {
+  const walk = (n: ElementNode, sy: number) => {
     const m = n.props.material;
     if (m) {
       out.push({
         x: n.x * cam.scale + cam.tx,
-        y: n.y * cam.scale + cam.ty,
+        y: (n.y - sy) * cam.scale + cam.ty, // scroll offset — materials scroll inside scroll regions
         w: n.w * cam.scale,
         h: n.h * cam.scale,
         radius: (n.props.style?.radius ?? 0) * cam.scale,
@@ -154,9 +154,10 @@ export function collectMaterials(root: ElementNode, cam: Camera): MaterialPanel[
         animated: !!m.animated,
       });
     }
-    for (const c of n.children) if (c.kind === "element") walk(c);
+    const childSy = n.props.style?.overflow === "scroll" ? sy + (scroll.get(n.id) ?? 0) : sy;
+    for (const c of n.children) if (c.kind === "element") walk(c, childSy);
   };
-  walk(root);
+  walk(root, 0);
   return out;
 }
 

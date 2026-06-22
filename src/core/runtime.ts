@@ -341,7 +341,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
         if (caret) fg.rects.push(caret); // caret on top (composer input sits on glass)
       }
     }
-    const materials = collectMaterials(root, camera);
+    const materials = collectMaterials(root, camera, scrollY);
     materialsPresent = materials.length > 0;
 
     // Particles: CPU-simulate each emitter, persisting state per node id, then concatenate

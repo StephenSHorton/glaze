@@ -52,6 +52,61 @@ fn material(uv: vec2f, px: vec2f) -> vec4f {
   return vec4f(c, 1.0);
 }`;
 
+// A rotating glass CUBE, ray-traced inside the fragment shader: ray-box intersection, refraction
+// through the front+back faces (so it bends the live backdrop = hero + lamp), Fresnel edges,
+// chromatic dispersion. Self-contained in one material quad. `backdrop: true` so it can sample
+// the scene behind it; `animated: true` for the spin.
+export const GLASS_CUBE = `
+fn boxI(ro: vec3f, rd: vec3f, rad: vec3f) -> vec2f {
+  let m = 1.0 / rd; let n = m * ro; let k = abs(m) * rad;
+  let t1 = -n - k; let t2 = -n + k;
+  return vec2f(max(max(t1.x, t1.y), t1.z), min(min(t2.x, t2.y), t2.z));
+}
+fn boxNin(ro: vec3f, rd: vec3f, rad: vec3f) -> vec3f {
+  let m = 1.0 / rd; let t1 = -(m * ro) - abs(m) * rad;
+  return -sign(rd) * step(t1.yzx, t1.xyz) * step(t1.zxy, t1.xyz);
+}
+fn boxNout(ro: vec3f, rd: vec3f, rad: vec3f) -> vec3f {
+  let m = 1.0 / rd; let t2 = -(m * ro) + abs(m) * rad;
+  return sign(rd) * step(t2.xyz, t2.yzx) * step(t2.xyz, t2.zxy);
+}
+fn rotM(a: f32, b: f32) -> mat3x3<f32> {
+  let ca = cos(a); let sa = sin(a); let cb = cos(b); let sb = sin(b);
+  return mat3x3<f32>(ca, 0.0, -sa, 0.0, 1.0, 0.0, sa, 0.0, ca) * mat3x3<f32>(1.0, 0.0, 0.0, 0.0, cb, sb, 0.0, -sb, cb);
+}
+fn material(uv: vec2f, px: vec2f) -> vec4f {
+  let t = u.res.w * 0.4;
+  let q = (uv - 0.5) * 2.7;
+  let ro0 = vec3f(q, 2.0);
+  let rd0 = vec3f(0.0, 0.0, -1.0);
+  let R = rotM(t, t * 0.6);
+  let Ri = transpose(R);
+  let ro = Ri * ro0;
+  let rd = Ri * rd0;
+  let rad = vec3f(0.6);
+  let h = boxI(ro, rd, rad);
+  if (h.x > h.y || h.y < 0.0) { return vec4f(0.0); } // miss → fully transparent
+  let nIn = boxNin(ro, rd, rad);
+  let nInV = R * nIn;
+  let pE = ro + rd * h.x;
+  let rd2 = refract(rd, nIn, 1.0 / 1.5);
+  let pE2 = pE + rd2 * 0.001;
+  let nOut = boxNout(pE2, rd2, rad);
+  var dir = refract(rd2, -nOut, 1.5);
+  if (dot(dir, dir) < 0.01) { dir = reflect(rd2, -nOut); } // total internal reflection
+  let dv = R * dir;
+  let strength = u.rect.z * 0.34;
+  let base = px + dv.xy * strength;
+  let disp = dv.xy * strength * 0.05;
+  var col = vec3f(sampleBackdrop(base + disp).r, sampleBackdrop(base).g, sampleBackdrop(base - disp).b);
+  col = mix(col, vec3f(0.72, 0.82, 1.0), 0.05) * 1.04;
+  let fres = pow(1.0 - max(0.0, nInV.z), 4.0);
+  col += vec3f(0.6, 0.78, 1.0) * fres * 0.55; // glowing edges
+  let L = normalize(vec3f(-0.4, 0.7, 0.6));
+  col += vec3f(1.0) * pow(max(0.0, dot(reflect(rd0, nInV), L)), 26.0) * 0.7; // specular glint
+  return vec4f(col, 1.0);
+}`;
+
 function goDemo() {
   window.location.search = "?demo";
 }
@@ -104,17 +159,27 @@ function SectionHeading({ vw, title, sub }: { vw: number; title: string; sub: st
 }
 
 function Hero({ vw, vh }: { vw: number; vh: number }) {
-  const h = Math.max(640, vh);
+  const h = Math.max(760, vh);
+  const cube = 340;
+  const cx = vw / 2;
   return (
-    <view style={{ width: "stretch", height: h, direction: "column", align: "center", justify: "center" }}>
-      <view style={{ width: Math.min(880, vw - 80), direction: "column", align: "center", gap: 26 }}>
-        <text role="heading" level={1} style={{ fontSize: 70, fontWeight: 800, color: INK }}>Interfaces, painted on the GPU.</text>
-        <text style={{ maxWidth: 660, fontSize: 20, fontWeight: 500, color: SLATE }}>
-          Kussetsu renders your React with WebGPU — refraction, shaders, real spring physics — while the DOM stays a clean, invisible layer for accessibility. The whole page is the proof: glass bending live light, the way CSS never could.
-        </text>
-        <view style={{ direction: "row", gap: 14, align: "center" }}>
-          <PillButton label="Get started" fill={ACCENT} onActivate={goRepo} />
-          <PillButton label="See the live demo" glass onActivate={goDemo} />
+    <view style={{ width: "stretch", height: h }}>
+      {/* headline */}
+      <view style={{ absolute: { x: 0, y: Math.round(h * 0.12) }, width: vw, direction: "row", justify: "center" }}>
+        <view style={{ width: Math.min(880, vw - 80), direction: "column", align: "center" }}>
+          <text role="heading" level={1} style={{ fontSize: 66, fontWeight: 800, color: INK }}>Interfaces, painted on the GPU.</text>
+        </view>
+      </view>
+      {/* a rotating glass cube ray-traced in a shader — refracts the lamp behind it, slow spin */}
+      <view material={{ shader: GLASS_CUBE, backdrop: true, animated: true }} style={{ absolute: { x: Math.round(cx - cube / 2), y: Math.round(h * 0.3) }, width: cube, height: cube }} />
+      {/* subhead + CTAs */}
+      <view style={{ absolute: { x: 0, y: Math.round(h * 0.78) }, width: vw, direction: "row", justify: "center" }}>
+        <view style={{ width: Math.min(640, vw - 80), direction: "column", align: "center", gap: 24 }}>
+          <text style={{ fontSize: 19, fontWeight: 500, color: SLATE }}>Kussetsu renders your React with WebGPU — refraction, shaders, real spring physics — while the DOM stays a clean, invisible layer for accessibility. Glass bending live light, the way CSS never could.</text>
+          <view style={{ direction: "row", gap: 14, align: "center" }}>
+            <PillButton label="Get started" fill={ACCENT} onActivate={goRepo} />
+            <PillButton label="See the live demo" glass onActivate={goDemo} />
+          </view>
         </view>
       </view>
     </view>
