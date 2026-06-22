@@ -102,35 +102,37 @@ export function collectTexts(root: ElementNode, cam: Camera, scroll: ScrollMap):
 
 /** Content INSIDE glass nodes — drawn AFTER the glass composite so labels/inputs
  *  sit crisply ON the glass instead of being refracted by it. */
-export function collectForeground(root: ElementNode, cam: Camera): { rects: Rect[]; texts: TextItem[] } {
+export function collectForeground(root: ElementNode, cam: Camera, scroll: ScrollMap): { rects: Rect[]; texts: TextItem[] } {
   const rects: Rect[] = [];
   const texts: TextItem[] = [];
-  const emit = (n: ElementNode) => {
+  // sy = the scroll offset in effect at the glass/material node, shared by all its children.
+  const emit = (n: ElementNode, sy: number) => {
     const s = n.props.style ?? {};
     const x = n.x * cam.scale + cam.tx;
-    const y = n.y * cam.scale + cam.ty;
+    const y = (n.y - sy) * cam.scale + cam.ty;
     if (s.background) rects.push({ x, y, w: n.w * cam.scale, h: n.h * cam.scale, radius: (s.radius ?? 0) * cam.scale, smoothing: s.cornerSmoothing, color: s.background });
     if (n.type === "text") {
       const size = (s.fontSize ?? 16) * cam.scale;
       const weight = s.fontWeight ?? 400;
       const color = s.color ?? ([1, 1, 1, 1] as RGBA);
       if (n.wrapped) {
-        for (const L of n.wrapped.result.lines) if (L.text) texts.push({ x, y: (n.y + L.y) * cam.scale + cam.ty, text: L.text, size, weight, color });
+        for (const L of n.wrapped.result.lines) if (L.text) texts.push({ x, y: (n.y - sy + L.y) * cam.scale + cam.ty, text: L.text, size, weight, color });
       } else {
         const str = textOf(n);
         if (str) texts.push({ x, y, text: str, size, weight, color });
       }
     }
-    for (const c of n.children) if (c.kind === "element") emit(c);
+    for (const c of n.children) if (c.kind === "element") emit(c, sy);
   };
-  const find = (n: ElementNode) => {
+  const find = (n: ElementNode, sy: number) => {
     if (n.props.glass || n.props.material) {
-      for (const c of n.children) if (c.kind === "element") emit(c);
+      for (const c of n.children) if (c.kind === "element") emit(c, sy);
       return; // nested glass/material not handled — fine for now
     }
-    for (const c of n.children) if (c.kind === "element") find(c);
+    const childSy = n.props.style?.overflow === "scroll" ? sy + (scroll.get(n.id) ?? 0) : sy;
+    for (const c of n.children) if (c.kind === "element") find(c, childSy);
   };
-  find(root);
+  find(root, 0);
   return { rects, texts };
 }
 
@@ -158,16 +160,16 @@ export function collectMaterials(root: ElementNode, cam: Camera): MaterialPanel[
   return out;
 }
 
-export function collectGlass(root: ElementNode, cam: Camera): GlassPanel[] {
+export function collectGlass(root: ElementNode, cam: Camera, scroll: ScrollMap): GlassPanel[] {
   const out: GlassPanel[] = [];
   // When the slider panel is live, its params override every panel's per-node spec.
   const t = glassTuning.enabled ? glassTuning.params : null;
-  const walk = (n: ElementNode) => {
+  const walk = (n: ElementNode, sy: number) => {
     const g = n.props.glass;
     if (g) {
       out.push({
         x: n.x * cam.scale + cam.tx,
-        y: n.y * cam.scale + cam.ty,
+        y: (n.y - sy) * cam.scale + cam.ty, // scroll offset — glass scrolls inside scroll regions
         w: n.w * cam.scale,
         h: n.h * cam.scale,
         radius: (n.props.style?.radius ?? 22) * cam.scale,
@@ -181,9 +183,10 @@ export function collectGlass(root: ElementNode, cam: Camera): GlassPanel[] {
         dispersion: t ? t.dispersion : (g.dispersion ?? 0.025),
       });
     }
-    for (const c of n.children) if (c.kind === "element") walk(c);
+    const childSy = n.props.style?.overflow === "scroll" ? sy + (scroll.get(n.id) ?? 0) : sy;
+    for (const c of n.children) if (c.kind === "element") walk(c, childSy);
   };
-  walk(root);
+  walk(root, 0);
   return out;
 }
 

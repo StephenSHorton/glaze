@@ -11,6 +11,7 @@ import { FxGallery } from "./FxGallery";
 import { MorphDemo } from "./MorphDemo";
 import { Showcase } from "./Showcase";
 import { MainPage } from "./MainPage";
+import { MarketingPage } from "./MarketingPage";
 import { runStress } from "./stress";
 
 const canvas = document.getElementById("gpu") as HTMLCanvasElement;
@@ -23,11 +24,11 @@ function showError(err: unknown) {
   throw err;
 }
 
-async function boot(Component: ComponentType, opts: GpuRootOptions) {
+async function boot(Component: ComponentType, opts: GpuRootOptions, devPanel = true) {
   try {
     const root = await createGpuRoot(canvas, opts);
     // Dev tooling (NOT part of the renderer): live glass tuning panel + console hooks.
-    canvas.parentElement!.appendChild(buildGlassPanel(root.requestRender));
+    if (devPanel) canvas.parentElement!.appendChild(buildGlassPanel(root.requestRender));
     (window as unknown as { __glass?: typeof glassTuning; __frame?: () => void }).__glass = glassTuning;
     (window as unknown as { __frame?: () => void }).__frame = root.frame;
     root.render(createElement(Component));
@@ -45,7 +46,9 @@ const params = new URLSearchParams(location.search);
 if (params.has("stress")) {
   runStress(canvas).catch(showError);
 } else if (params.has("demo")) {
-  boot(App, { camera: false, pageScroll: true });
+  boot(MainPage, { camera: false, pageScroll: true, textSelectable: true }); // the capability showcase
+} else if (params.has("kitchen")) {
+  boot(App, { camera: false, pageScroll: true }); // kitchen-sink demo
 } else if (params.has("compat")) {
   boot(CompatDemo, { camera: false });
 } else if (params.has("menu")) {
@@ -57,5 +60,5 @@ if (params.has("stress")) {
 } else if (params.has("showcase")) {
   boot(Showcase, { camera: false }); // the old tabbed showcase
 } else {
-  boot(MainPage, { camera: false, pageScroll: true, textSelectable: true }); // default: the one-page scrolling showcase
+  boot(MarketingPage, { camera: false }, false); // default: the marketing site (no dev panel)
 }

@@ -327,7 +327,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
     scrollRegions = collectScrollRegions(root, camera, scrollY);
     selectables = collectSelectable(root, camera, opts.textSelectable);
     editables = collectEditable(root, camera);
-    const fg = collectForeground(root, camera); // glass children, drawn ON the glass
+    const fg = collectForeground(root, camera, scrollY); // glass children, drawn ON the glass
     const rects = [...collectRects(root, focusedId, camera, scrollY), ...collectSelection(selectables, selection)];
     if (editingId != null) {
       const r = editables.find((e) => e.id === editingId);
@@ -381,7 +381,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
       particles = { data, count: total };
     }
 
-    painter.frame(rects, collectTexts(root, camera, scrollY), collectGlass(root, camera), fg, materials, {
+    painter.frame(rects, collectTexts(root, camera, scrollY), collectGlass(root, camera, scrollY), fg, materials, {
       time: performance.now() / 1000,
       pointer: lastPointer,
       particles,
