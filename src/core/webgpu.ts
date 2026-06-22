@@ -415,7 +415,13 @@ const RECT_STRIDE = FLOATS_PER_RECT * 4;
 const GLYPH_BASE = 44; // CSS px the atlas glyph is measured at
 const GLYPH_SS = 2; // atlas supersample
 const GLYPH_PAD = 2; // CSS px padding around each glyph cell (overhang)
-const GLYPH_ASCENT = Math.round(GLYPH_BASE * 0.98);
+// Rasterization base for a given DISPLAY size. Small text shares the 44px atlas entry (cheap);
+// large text (big headings) gets its OWN higher-res entry, bucketed to 32px steps, so it isn't
+// the 44px sprite upscaled ~5× (which softens/pixelates). Capped at 256 so a few huge glyphs
+// can't blow the shared atlas budget.
+function glyphBaseFor(size: number): number {
+  return size <= GLYPH_BASE ? GLYPH_BASE : Math.min(256, Math.ceil(size / 32) * 32);
+}
 // One shared atlas for every (weight, glyph) pair. A real multi-weight UI burns through
 // the 1024² budget fast — each weight is a distinct entry — and overflow glyphs silently
 // rasterize blank. 2048² (~4× the slots) covers realistic multi-weight UIs; a true fix
@@ -765,15 +771,15 @@ export class Painter {
   }
 
   // --- Gap B: glyph atlas ---
-  private getGlyph(char: string, weight: number): GlyphEntry {
-    const key = `${weight}|${char}`;
+  private getGlyph(char: string, weight: number, base: number): GlyphEntry {
+    const key = `${weight}|${base}|${char}`;
     const cached = this.glyphCache.get(key);
     if (cached) return cached;
-    const font = `${weight} ${GLYPH_BASE}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+    const font = `${weight} ${base}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
     this.glyph2d.font = font;
     const advance = this.glyph2d.measureText(char).width;
     const cellW = Math.max(1, Math.ceil(advance) + GLYPH_PAD * 2);
-    const cellH = Math.ceil(GLYPH_BASE * 1.3);
+    const cellH = Math.ceil(base * 1.3);
     const aw = cellW * GLYPH_SS;
     const ah = cellH * GLYPH_SS;
     if (this.packX + aw > ATLAS_SIZE) {
@@ -799,7 +805,7 @@ export class Painter {
     o.font = font;
     o.fillStyle = "#fff"; // white alpha mask; tinted per-instance in the shader
     o.textBaseline = "alphabetic";
-    o.fillText(char, GLYPH_PAD, GLYPH_ASCENT);
+    o.fillText(char, GLYPH_PAD, Math.round(base * 0.98));
     this.device.queue.copyExternalImageToTexture({ source: off, flipY: false }, { texture: this.atlasTex, origin: { x: px, y: py }, premultipliedAlpha: true }, [aw, ah]);
     const entry: GlyphEntry = { u0: px / ATLAS_SIZE, v0: py / ATLAS_SIZE, u1: (px + aw) / ATLAS_SIZE, v1: (py + ah) / ATLAS_SIZE, cellW, cellH, advance };
     this.glyphCache.set(key, entry);
@@ -815,11 +821,12 @@ export class Painter {
     const data = this.glyphScratch;
     let n = 0;
     for (const t of texts) {
-      const scale = t.size / GLYPH_BASE;
+      const base = glyphBaseFor(t.size);
+      const scale = t.size / base;
       const cl = t.clip;
       let penX = 0; // display px — advance by the SAME measurement layout uses (charAdvance)
       for (const ch of t.text) {
-        const e = this.getGlyph(ch, t.weight);
+        const e = this.getGlyph(ch, t.weight, base);
         if (e.u1 > e.u0) {
           const o = n * FLOATS_PER_GLYPH;
           // The sprite cell sits GLYPH_PAD (atlas px) left of the pen; the pen itself is the
