@@ -70,7 +70,8 @@ export interface FrameInfo {
   time: number;
   pointer: [number, number];
   particles?: ParticleBatch;
-  post?: "bloom" | null;
+  // Post-process effect masked to a SCREEN-px box (rect), so only that region is affected.
+  post?: { effect: "bloom"; rect: [number, number, number, number] } | null;
 }
 
 // Glyph atlas: instanced per-glyph quads sampling a packed alpha atlas, tinted by
@@ -382,7 +383,7 @@ const BLOOM_COMPOSITE_WGSL = /* wgsl */ `
 @group(0) @binding(0) var samp: sampler;
 @group(0) @binding(1) var scene: texture_2d<f32>;
 @group(0) @binding(2) var bloomTex: texture_2d<f32>;
-struct CU { intensity: f32, pad: vec3f };
+struct CU { intensity: f32, pad: f32, rect: vec4f }; // rect = x,y,w,h in FRAMEBUFFER px
 @group(0) @binding(3) var<uniform> u: CU;
 struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> VSOut {
@@ -392,7 +393,13 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
 @fragment fn fs(in: VSOut) -> @location(0) vec4f {
   let base = textureSampleLevel(scene, samp, in.uv, 0.0).rgb;
   let bloom = textureSampleLevel(bloomTex, samp, in.uv, 0.0).rgb;
-  return vec4f(base + bloom * u.intensity, 1.0);
+  // Mask the bloom to the region's box (soft-edged), so the rest of the page is an exact
+  // 1:1 copy of the scene — untouched.
+  let p = in.pos.xy;
+  let m = 28.0;
+  let ax = smoothstep(u.rect.x - m, u.rect.x + m, p.x) * (1.0 - smoothstep(u.rect.x + u.rect.z - m, u.rect.x + u.rect.z + m, p.x));
+  let ay = smoothstep(u.rect.y - m, u.rect.y + m, p.y) * (1.0 - smoothstep(u.rect.y + u.rect.w - m, u.rect.y + u.rect.w + m, p.y));
+  return vec4f(base + bloom * u.intensity * ax * ay, 1.0);
 }
 `;
 
@@ -902,7 +909,7 @@ export class Painter {
 
   // Bloom post-process: extract+blur the scene's bright pixels to a quarter-res texture,
   // then add them back over the canvas. Two passes, one small texture.
-  private bloom(encoder: GPUCommandEncoder, canvasView: GPUTextureView, fbw: number, fbh: number) {
+  private bloom(encoder: GPUCommandEncoder, canvasView: GPUTextureView, fbw: number, fbh: number, rectFb: [number, number, number, number]) {
     const THRESHOLD = 0.6, SPREAD = 2.2, INTENSITY = 1.2;
     this.device.queue.writeBuffer(this.bloomExtractU, 0, new Float32Array([1 / fbw, 1 / fbh, THRESHOLD, SPREAD]));
     const exBG = this.device.createBindGroup({
@@ -915,7 +922,7 @@ export class Painter {
     pe.draw(3);
     pe.end();
 
-    this.device.queue.writeBuffer(this.bloomCompositeU, 0, new Float32Array([INTENSITY, 0, 0, 0]));
+    this.device.queue.writeBuffer(this.bloomCompositeU, 0, new Float32Array([INTENSITY, 0, 0, 0, rectFb[0], rectFb[1], rectFb[2], rectFb[3]]));
     const coBG = this.device.createBindGroup({
       layout: this.bloomCompositePipeline.getBindGroupLayout(0),
       entries: [{ binding: 0, resource: this.sampler }, { binding: 1, resource: this.sceneView! }, { binding: 2, resource: this.brightView! }, { binding: 3, resource: { buffer: this.bloomCompositeU } }],
@@ -942,8 +949,8 @@ export class Painter {
     const encoder = this.device.createCommandEncoder();
     const canvasView = this.context.getCurrentTexture().createView();
     // With post-process on, the whole scene composites into sceneTex; bloom then writes the
-    // canvas. Without it, everything renders straight to the canvas as before.
-    const post = info?.post === "bloom";
+    // canvas (masked to the region). Without it, everything renders straight to the canvas.
+    const post = info?.post ?? null;
     const finalView = post ? this.sceneView! : canvasView;
 
     // PASS 1 — non-glass content (rects + glyphs) -> backdrop texture
@@ -990,8 +997,11 @@ export class Painter {
       pp.end();
     }
 
-    // PASS 5 — post-process bloom: sceneTex -> canvas.
-    if (post) this.bloom(encoder, canvasView, fbw, fbh);
+    // PASS 5 — post-process bloom: sceneTex -> canvas, masked to the region (CSS px -> fb px).
+    if (post) {
+      const r = post.rect;
+      this.bloom(encoder, canvasView, fbw, fbh, [r[0] * dpr, r[1] * dpr, r[2] * dpr, r[3] * dpr]);
+    }
 
     this.device.queue.submit([encoder.finish()]);
     instanceBuffer?.destroy();

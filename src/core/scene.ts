@@ -70,6 +70,7 @@ export interface NodeProps {
   glass?: GlassSpec; // present => painted as refractive glass
   material?: MaterialSpec; // present => filled by a custom WGSL fragment shader
   particles?: import("./particles").ParticleSpec; // present => emits an instanced particle field over this box
+  postProcess?: "bloom"; // present => a full-screen effect is applied, but only WITHIN this node's box
   children?: unknown;
 }
 

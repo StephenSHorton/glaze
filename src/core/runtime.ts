@@ -22,6 +22,7 @@ import {
   collectSelectable,
   selectionToText,
   collectParticles,
+  collectPostProcess,
   collectEditable,
   editCaretRect,
   type ScrollRegion,
@@ -39,8 +40,6 @@ export interface GpuRootOptions {
   pageScroll?: boolean;
   /** Make ALL text drag-selectable + copyable (Cmd/Ctrl+C), like a normal page. Default false. */
   textSelectable?: boolean;
-  /** Full-screen post-process over the composited scene. "bloom" makes bright pixels glow. */
-  postProcess?: "bloom" | null;
 }
 
 export interface GpuRoot {
@@ -57,7 +56,7 @@ export interface GpuRoot {
 /** Create a Kussetsu root that paints `canvas` on the GPU and bridges a11y + input.
  *  `canvas` must live inside a positioned parent (the overlay is placed over it). */
 export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootOptions = {}): Promise<GpuRoot> {
-  const opts = { camera: true, pageScroll: false, textSelectable: false, postProcess: null as "bloom" | null, ...options };
+  const opts = { camera: true, pageScroll: false, textSelectable: false, ...options };
 
   // Real layout (Yoga, WASM). Dynamic import keeps it out of bundles that lay nothing out.
   const { layoutWithYoga } = await import("./yogaLayout");
@@ -374,7 +373,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
       time: performance.now() / 1000,
       pointer: lastPointer,
       particles,
-      post: opts.postProcess,
+      post: collectPostProcess(root, camera), // a node's postProcess prop → effect masked to its box
     });
     overlay.syncFromScene(collectSemantics(root, camera, scrollY));
     // animated materials + particles drive a continuous repaint loop

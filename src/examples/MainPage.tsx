@@ -163,9 +163,11 @@ function ParticleSection({ vw }: { vw: number }) {
   return (
     <view style={{ width: "stretch", height: sectionH, direction: "column", background: INK }}>
       <Heading title="Particles + bloom" sub="Thousands of additive sprites, CPU-simulated and drawn in one instanced call — sweep your cursor through them. A full-screen bloom post-process blooms the bright pixels into glow (and lifts the shaders elsewhere on the page too)." />
-      {/* the emitter is an invisible box; the field is drawn (and camera-scrolled) by the painter */}
+      {/* the emitter is an invisible box; the field is drawn (and camera-scrolled) by the painter.
+          postProcess scopes the bloom to THIS box only — the rest of the page stays crisp. */}
       <view
         particles={{ count: 1500, color: [1.0, 0.5, 0.16, 1], color2: [1.0, 0.82, 0.36, 1], size: 13, speed: 22, drag: 0.5, pointer: 3200, life: 4 }}
+        postProcess="bloom"
         style={{ absolute: { x: 0, y: top }, width: vw, height: sectionH - top }}
       />
     </view>

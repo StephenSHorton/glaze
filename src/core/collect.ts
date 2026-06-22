@@ -348,6 +348,28 @@ export interface ParticleNode {
   spec: ParticleSpec;
 }
 
+export interface PostRegion {
+  effect: "bloom";
+  rect: [number, number, number, number]; // SCREEN px — the box to apply the effect within
+}
+
+/** The first node with props.postProcess → the effect + its on-screen box. The whole scene
+ *  still renders through the post pipeline, but the effect is masked to this region so the
+ *  rest of the page stays untouched. */
+export function collectPostProcess(root: ElementNode, cam: Camera): PostRegion | null {
+  let found: PostRegion | null = null;
+  const walk = (n: ElementNode) => {
+    if (found) return;
+    if (n.props.postProcess) {
+      found = { effect: n.props.postProcess, rect: [n.x * cam.scale + cam.tx, n.y * cam.scale + cam.ty, n.w * cam.scale, n.h * cam.scale] };
+      return;
+    }
+    for (const c of n.children) if (c.kind === "element") walk(c);
+  };
+  walk(root);
+  return found;
+}
+
 /** Particle emitter nodes (props.particles). World-space; the runtime simulates each. */
 export function collectParticles(root: ElementNode): ParticleNode[] {
   const out: ParticleNode[] = [];
