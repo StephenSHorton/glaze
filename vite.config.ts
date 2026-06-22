@@ -8,7 +8,10 @@ import { kussetsuCompatVite } from "./src/compat/vite";
 // <view>/<text> + a mapped style, then the React plugin lowers the result as usual.
 // Hand-authored <view>/<text> are left untouched, so migrated HTML and the owned
 // vocabulary coexist in one tree.
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Project Pages serve under /<repo>/. Only the production build needs the prefix;
+  // local dev stays at "/" (http://localhost:5280).
+  base: command === "build" ? "/kussetsu/" : "/",
   plugins: [kussetsuCompatVite(), react()],
   server: { port: 5280 },
-});
+}));

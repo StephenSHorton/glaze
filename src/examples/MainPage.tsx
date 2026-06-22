@@ -26,10 +26,10 @@ function Heading({ title, sub }: { title: string; sub: string }) {
 // ── Hero ────────────────────────────────────────────────────────────────────────
 function Header({ vw }: { vw: number }) {
   return (
-    <view style={{ width: "stretch", height: 300, direction: "column", align: "center", justify: "center", gap: 16, padding: 40 }}>
+    <view style={{ width: "stretch", height: 440, direction: "column", align: "center", justify: "center", gap: 20, padding: 40 }}>
       <text role="heading" level={1} style={{ fontSize: 64, fontWeight: 800, color: WHITE }}>Kussetsu</text>
-      <text style={{ maxWidth: 760, fontSize: 19, fontWeight: 500, color: MUTED }}>
-        A UI framework where every pixel is painted on the GPU and the DOM is just an invisible layer for accessibility and input. Below: things the browser can't render. Scroll ↓
+      <text style={{ maxWidth: 800, fontSize: 19, fontWeight: 500, color: MUTED }}>
+        For thirty years HTML and CSS carried the web to every corner of the earth — they gave us the map, and we honor it. Here every pixel is painted on the GPU; the DOM stays only as an invisible layer for accessibility and input. The canvas is the page now, and imagination arrives in full light. ↓
       </text>
     </view>
   );
@@ -60,7 +60,7 @@ function FxSection({ vw }: { vw: number }) {
   const bandsTop = 150, bandsH = 620;
   return (
     <view style={{ width: "stretch", height: 820, direction: "column" }}>
-      <Heading title="Shaders as materials" sub="Every tile's fill is a custom WGSL fragment shader — “react-three-fiber, but for 2D UI”. The last three sample the live scene behind them and bend it; move your cursor over Ripple and Loupe." />
+      <Heading title="Shaders as Materials" sub="Every panel's fill is a hand-written WGSL fragment shader. Some reach back into the live scene behind them and bend it — a ripple, a magnifying loupe — a thing CSS backdrop-filter was never built to do." />
       {/* textured backdrop so the sampling materials have detail to bend/magnify */}
       <view style={{ absolute: { x: 0, y: bandsTop }, width: vw, height: bandsH, direction: "column", overflow: "hidden" }}>
         {FX_BANDS.map((b, i) => (
@@ -110,7 +110,7 @@ function SpringSection() {
   const cr = useSpring(p.color[0], SMOOTH), cg = useSpring(p.color[1], SMOOTH), cb = useSpring(p.color[2], SMOOTH);
   return (
     <view style={{ width: "stretch", height: 720, direction: "column", background: INK }}>
-      <Heading title="Springs + squircles" sub="Click a shape: it springs there with real, interruptible physics (change targets mid-flight and it carries momentum) — and the corners are true superellipse squircles, not circular arcs. Neither is possible with CSS." />
+      <Heading title="Springs and Squircles" sub="Real, interruptible spring physics: click a shape and retarget it mid-flight — its momentum carries through. The corners are true superellipse squircles — continuous curvature, not stitched circular arcs. Neither has a CSS spelling." />
       <view style={{ grow: 1, width: "stretch", direction: "column", align: "center", justify: "center", gap: 44 }}>
         <view style={{ width: 440, height: 290, direction: "row", align: "center", justify: "center" }}>
           <view style={{ width: Math.round(w), height: Math.round(h), radius, cornerSmoothing: sm, background: [cr, cg, cb, 1] }} />
@@ -143,7 +143,7 @@ function GlassSection({ vw, t }: { vw: number; t: number }) {
   const panelW = Math.min(520, vw - 120), panelH = 220;
   return (
     <view style={{ width: "stretch", height: sectionH, direction: "column", background: INK }}>
-      <Heading title="Glass over anything" sub="Because kussetsu owns the framebuffer, a glass panel refracts whatever's behind it — here, shapes drifting live. CSS backdrop-filter can blur a rectangle, but it can't refract, disperse, or reach moving content like this." />
+      <Heading title="Glass Over Anything" sub="Because we own the entire framebuffer, a single sheet of glass refracts and disperses whatever moves behind it. Light splits where it bends — a depth backdrop-filter, which only blurs, can never reach." />
       {DRIFT.map((c, idx) => {
         const x = ((c.speed * t + idx * 360) % span + span) % span - 140;
         return <view key={idx} style={{ absolute: { x: Math.round(x), y: contentTop + c.y }, width: c.w, height: c.h, radius: c.r, cornerSmoothing: 0.5, background: c.color }} />;
@@ -162,7 +162,7 @@ function ParticleSection({ vw }: { vw: number }) {
   const sectionH = 580, top = 160;
   return (
     <view style={{ width: "stretch", height: sectionH, direction: "column", background: INK }}>
-      <Heading title="Particles + bloom" sub="Thousands of additive sprites, CPU-simulated and drawn in one instanced call — sweep your cursor through them. A full-screen bloom post-process blooms the bright pixels into glow (and lifts the shaders elsewhere on the page too)." />
+      <Heading title="Particles and Bloom" sub="Thousands of GPU particles in one instanced draw, alive to your cursor — sweep through to stir and plow them. A bloom pass lets the brightest ones spill their glow into the dark." />
       {/* the emitter is an invisible box; the field is drawn (and camera-scrolled) by the painter.
           postProcess scopes the bloom to THIS box only — the rest of the page stays crisp. */}
       <view
@@ -255,7 +255,7 @@ function MigrateSection({ vw }: { vw: number }) {
   const colW = Math.min(440, (Math.min(980, vw - 80) - 30) / 2);
   return (
     <view style={{ width: "stretch", height: 820, direction: "column", background: INK }}>
-      <Heading title="Native vocabulary vs. the familiar way" sub="The same card, written two ways: the HTML + Tailwind you'd usually reach for, and kussetsu's native vocabulary — <view>/<text> with a plain style object, no cascade. kussetsu/compat maps the left onto the right at build time, so you can migrate an existing React app incrementally, then drop to native where you want to go beyond CSS. Both paint the identical result below." />
+      <Heading title="Native Vocabulary, or Migrate" sub="Author in the native tongue — <view> and <text> with a plain style object, no cascade. Or bring your existing HTML and Tailwind React, and a build-time compat layer maps it onto the GPU so you migrate one piece at a time. The same card, both ways, painting the identical result below." />
       <view style={{ width: "stretch", direction: "row", align: "start", justify: "center", gap: 30 }}>
         <CodeCol label="HTML + TAILWIND — the familiar way" accent={[0.5, 0.78, 0.62, 1]} code={TAILWIND_CODE} w={colW} />
         <CodeCol label="KUSSETSU — the native vocabulary" accent={[0.66, 0.66, 0.98, 1]} code={NATIVE_CODE} w={colW} />
@@ -271,8 +271,8 @@ function MigrateSection({ vw }: { vw: number }) {
 function Footer() {
   return (
     <view style={{ width: "stretch", height: 150, direction: "column", align: "center", justify: "center", gap: 6 }}>
-      <text style={{ fontSize: 15, fontWeight: 600, color: MUTED }}>Real React · custom reconciler · WebGPU · an invisible accessible DOM</text>
-      <text style={{ fontSize: 13, color: FAINT }}>every pixel above is WGSL output on one canvas</text>
+      <text style={{ fontSize: 15, fontWeight: 600, color: MUTED }}>Real React · a custom reconciler · WebGPU · an invisible, accessible DOM</text>
+      <text style={{ fontSize: 13, color: FAINT }}>Every pixel above is WGSL output on a single canvas.</text>
     </view>
   );
 }
