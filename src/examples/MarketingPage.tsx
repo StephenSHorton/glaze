@@ -23,25 +23,29 @@ const CARD_GLASS: GlassSpec = { refraction: 0.09, blur: 2, tint: 0.07, tintColor
 const CTA_GLASS: GlassSpec = { refraction: 0.1, blur: 2, tint: 0.05, tintColor: COOL, rim: 16, specular: 0.16, dispersion: 0.07 };
 const PANE_GLASS: GlassSpec = { refraction: 0.12, blur: 2, tint: 0.05, tintColor: COOL, rim: 18, specular: 0.14, dispersion: 0.09 };
 
-// Drifting colorful gradient lights on black, rendered INTO the backdrop so glass bends it.
+// Controlled neon light-bars in a dark room: a few parallel diagonal tubes, strong colors,
+// gentle drift — rendered INTO the backdrop so glass refracts them.
 export const BG_LIGHTS = `
-fn glow(p: vec2f, c: vec2f, col: vec3f, r: f32) -> vec3f {
-  let d = p - c;
-  return col / (1.0 + dot(d, d) / (r * r));
+fn bar(p: vec2f, a: vec2f, b: vec2f, col: vec3f, w: f32) -> vec3f {
+  let pa = p - a; let ba = b - a;
+  let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  let d = length(pa - ba * h);
+  return col / (1.0 + (d * d) / (w * w)); // neon-tube falloff: thin bright core + glow
 }
 fn material(uv: vec2f, px: vec2f) -> vec4f {
-  let t = u.res.w * 0.11;
-  let asp = u.res.x / max(u.res.y, 1.0);
-  let p = vec2f(uv.x * asp, uv.y);
+  let t = u.res.w * 0.08;
+  let W = u.res.x / max(u.res.y, 1.0);
+  let p = vec2f(uv.x * W, uv.y);
+  let o = 0.05 * sin(t * 0.6); // gentle drift along the bars' normal
+  let s = 0.22;                // slope — parallel diagonals
   var c = vec3f(0.0);
-  c += glow(p, vec2f((0.20 + 0.07 * sin(t * 0.7)) * asp, 0.26 + 0.12 * cos(t * 0.9)), vec3f(0.95, 0.12, 0.62), 0.25);
-  c += glow(p, vec2f((0.82 + 0.06 * cos(t * 0.8)) * asp, 0.30 + 0.13 * sin(t * 1.1)), vec3f(0.12, 0.42, 1.0), 0.28);
-  c += glow(p, vec2f((0.54 + 0.10 * sin(t * 0.6)) * asp, 0.76 + 0.12 * cos(t * 1.2)), vec3f(0.06, 0.85, 0.66), 0.26);
-  c += glow(p, vec2f((0.92 + 0.05 * sin(t * 1.3)) * asp, 0.78 + 0.13 * cos(t * 0.7)), vec3f(1.0, 0.5, 0.12), 0.21);
-  c += glow(p, vec2f((0.08 + 0.06 * cos(t * 1.0)) * asp, 0.82 + 0.10 * sin(t * 0.85)), vec3f(0.5, 0.18, 1.0), 0.25);
-  c += glow(p, vec2f((0.44 + 0.08 * cos(t * 1.4)) * asp, 0.10 + 0.10 * sin(t * 1.05)), vec3f(0.98, 0.25, 0.42), 0.20);
-  c *= 0.82 + 0.22 * fbm(p * 2.4 + t);
-  return vec4f(c * 0.6, 1.0);
+  c += bar(p, vec2f(-0.2 * W, -0.05 + o), vec2f(1.2 * W, -0.05 + s + o), vec3f(1.0, 0.10, 0.55), 0.009);   // pink
+  c += bar(p, vec2f(-0.2 * W, 0.20 + o), vec2f(1.2 * W, 0.20 + s + o), vec3f(0.15, 0.85, 1.0), 0.008);     // cyan
+  c += bar(p, vec2f(-0.2 * W, 0.45 - o), vec2f(1.2 * W, 0.45 + s - o), vec3f(0.55, 0.22, 1.0), 0.009);     // purple
+  c += bar(p, vec2f(-0.2 * W, 0.70 + o * 0.7), vec2f(1.2 * W, 0.70 + s + o * 0.7), vec3f(0.10, 1.0, 0.55), 0.008); // green
+  c += bar(p, vec2f(-0.2 * W, 0.95 - o * 0.6), vec2f(1.2 * W, 0.95 + s - o * 0.6), vec3f(1.0, 0.55, 0.10), 0.008); // orange
+  c *= 0.92 + 0.12 * fbm(p * 3.0 + t); // subtle flicker
+  return vec4f(c, 1.0);
 }`;
 
 function goDemo() {
@@ -115,15 +119,21 @@ function Hero({ vw, vh }: { vw: number; vh: number }) {
 
 // ── One empty glass pane gliding across in a loop — pure refraction tracking the moving light ──
 function PaneSection({ vw, t }: { vw: number; t: number }) {
-  const h = 600;
-  const paneW = 400, paneH = 260;
-  const span = vw + paneW + 120;
-  const x = (((t * 80) % span) + span) % span - paneW - 60; // smooth left→right loop, slow
-  const y = 250;
+  const h = 560;
+  const paneW = 440, paneH = 132;
+  const headY = 230; // heading top
+  const paneY = headY - 34; // pane centered on the heading line → it glides OVER the words
+  const span = vw + paneW + 140;
+  const x = (((t * 90) % span) + span) % span - paneW - 70; // smooth left→right loop
   return (
     <view style={{ width: "stretch", height: h, direction: "column", align: "center", overflow: "hidden" }}>
-      <SectionHeading vw={vw} title="Glass that bends the light" sub="One empty pane, gliding over the live light. Watch the refraction and the chromatic edge shift as it moves — nothing is inside it; it's all the lens." />
-      <view glass={PANE_GLASS} style={{ absolute: { x, y }, width: paneW, height: paneH, radius: 30, cornerSmoothing: 0.7 }} />
+      <view style={{ absolute: { x: 0, y: headY }, width: vw, direction: "row", justify: "center" }}>
+        <text role="heading" level={2} style={{ fontSize: 50, fontWeight: 800, color: INK }}>Real UI, rendered in glass</text>
+      </view>
+      <view style={{ absolute: { x: 0, y: 360 }, width: vw, direction: "row", justify: "center" }}>
+        <text style={{ maxWidth: 600, fontSize: 18, fontWeight: 500, color: SLATE }}>An empty pane glides across the words — watch the type refract and its chromatic edge shift as it passes. Nothing inside it; it's all the lens.</text>
+      </view>
+      <view glass={PANE_GLASS} style={{ absolute: { x, y: paneY }, width: paneW, height: paneH, radius: 22, cornerSmoothing: 0.7 }} />
     </view>
   );
 }
