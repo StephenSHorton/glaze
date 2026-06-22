@@ -34,7 +34,7 @@
     "shaders"
   ],
   "author": "Stephen Horton",
-  "license": "ISC",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/StephenSHorton/kussetsu.git"

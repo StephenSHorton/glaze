@@ -163,4 +163,4 @@ Known caveats:
 
 ## License
 
-Being finalized — a `LICENSE` file will land before the first npm publish.
+[MIT](./LICENSE) © Stephen Horton
