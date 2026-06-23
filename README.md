@@ -24,7 +24,7 @@ focus just works.
 npm i kussetsu
 ```
 
-`react` **18** (`>=18.2`, not yet 19) is a peer dependency. You need a
+`react` **19** (`>=19.2`) is a peer dependency. You need a
 **WebGPU-capable browser** (Chrome 113+, Edge 113+, Safari 18+, recent Firefox).
 
 ## Quick start
@@ -283,7 +283,12 @@ renderer with a real published-library shape, not a finished framework. Known ca
   `createGpuRoot` **rejects** (it does *not* silently no-op) — `await` it in a
   `try/catch` and render your own HTML fallback (see [Quick start](#quick-start)).
 - **ESM-only.** No CommonJS build — use a modern ESM bundler (Vite / Next / etc.).
-- **React 18 only.** The reconciler is 18-era; the peer range is `^18.2.0` (no 19 yet).
+- **React 19 only.** The custom reconciler is built on `react-reconciler@0.33` (React 19.2),
+  so the peer range is `^19.2.0`. React 18 is no longer supported (the 0.29-era HostConfig it
+  required is incompatible with the React-19 contract). Pin to `kussetsu@0.2.x` if you need React 18.
+- **Suspense / `<Activity>` is supported.** A `<Suspense>` boundary flipping to its fallback
+  hides the suspended subtree across the whole pipeline — it paints nothing, takes no layout
+  space (the fallback flows normally), and receives no input — then fully reappears on resolve.
 - **Use the `<View>` / `<Text>` components, not lowercase intrinsics.** `@types/react`
   already claims `view` and `text` for SVG in `JSX.IntrinsicElements`, and a JSX
   augmentation can only *merge* with that (intersecting Kussetsu's `style: Style` with

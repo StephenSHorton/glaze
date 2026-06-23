@@ -152,6 +152,11 @@ export interface ElementNode {
   props: NodeProps;
   parent: AnyNode | Container | null;
   children: AnyNode[];
+  // Set by the reconciler's hideInstance/unhideInstance hooks when a <Suspense>/<Activity>
+  // boundary toggles this subtree's visibility. Every layout/paint/hit-test pass skips a
+  // node (and its subtree) while this is true, so a hidden subtree neither paints, takes
+  // layout space, nor receives input — it stays mounted, ready to reappear.
+  hidden?: boolean;
   // computed layout (CSS px, top-left origin)
   x: number;
   y: number;
@@ -165,6 +170,7 @@ export interface TextNode {
   kind: "text";
   text: string;
   parent: AnyNode | Container | null;
+  hidden?: boolean; // hidden by a Suspense/Activity visibility toggle (see ElementNode.hidden)
 }
 
 export type AnyNode = ElementNode | TextNode;
@@ -190,7 +196,7 @@ export function newText(text: string): TextNode {
 /** Concatenated string content of a <text> element (its text-node children). */
 export function textOf(node: ElementNode): string {
   let s = "";
-  for (const c of node.children) if (c.kind === "text") s += c.text;
+  for (const c of node.children) if (c.kind === "text" && !c.hidden) s += c.text;
   return s;
 }
 
@@ -198,7 +204,7 @@ export function textOf(node: ElementNode): string {
 export function firstText(node: ElementNode): string {
   if (node.type === "text") return textOf(node);
   for (const c of node.children) {
-    if (c.kind === "element") {
+    if (c.kind === "element" && !c.hidden) {
       const t = firstText(c);
       if (t) return t;
     }
@@ -206,16 +212,22 @@ export function firstText(node: ElementNode): string {
   return "";
 }
 
-// JSX host elements. Vite/esbuild strips types without type-checking, so the
-// loop runs even if these are loose — but keep them honest.
-declare global {
+// JSX host elements. React 19 dropped the global `JSX` namespace and scopes JSX to the
+// `react` module's namespace, so we augment THAT (the React-18-era `declare global` form
+// no longer registers intrinsics under the react-jsx runtime). `view` and `text` already
+// exist on React.JSX.IntrinsicElements as SVG elements, so we deliberately override them
+// with the Kussetsu host nodes — hence the @ts-expect-error on each (the SVG signature is
+// intentionally incompatible). Vite/esbuild strips types without type-checking anyway.
+declare module "react" {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
+      // Inline `import("react").ReactNode` (not the local alias) — augmenting the exported
+      // "react" module forbids referencing scene.ts's private type-import (TS4033).
       // @ts-expect-error deliberately override SVG's <view> intrinsic with the Kussetsu host node
-      view: NodeProps & { children?: ReactNode };
+      view: NodeProps & { children?: import("react").ReactNode };
       // @ts-expect-error deliberately override SVG's <text> intrinsic with the Kussetsu host node
-      text: NodeProps & { children?: ReactNode };
+      text: NodeProps & { children?: import("react").ReactNode };
     }
   }
 }

@@ -5,6 +5,59 @@ All notable changes to Kussetsu are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-22
+
+Migrate the custom renderer from React 18 to **React 19**. The whole React-18 coupling lived
+in one file (`src/core/hostConfig.ts`); React 19 ships a new `react-reconciler` with an
+incompatible HostConfig contract, so this is a clean switch, not a dual-support range.
+
+### Breaking
+
+- **React 19 is now required** (`peerDependencies.react` is `^19.2.0`; was `^18.2.0`). The
+  renderer is built on `react-reconciler@0.33` (was `0.29`). React 18 is no longer supported —
+  the two reconciler contracts are mutually exclusive. **Pin `kussetsu@0.2.x` for React 18.**
+
+### Changed
+
+- **`hostConfig.ts` rewritten for the `react-reconciler@0.33` contract**, verified against the
+  actual installed reconciler source:
+  - Dropped `prepareUpdate` (removed in React 19); `commitUpdate` is now the 5-arg
+    `(instance, type, prevProps, nextProps, internalHandle)` form (no `updatePayload`).
+  - Replaced `getCurrentEventPriority` with the renderer-held priority trio
+    `setCurrentUpdatePriority` / `getCurrentUpdatePriority` / `resolveUpdatePriority`.
+  - `createContainer` updated to its 10-arg React-19 signature (split error callbacks
+    `onUncaughtError` / `onCaughtError` / `onRecoverableError` + `onDefaultTransitionIndicator`);
+    the old `@ts-expect-error` on the call is gone (runtime and `@types` now agree).
+  - Added the required React-19 Suspense-in-commit / transition members (`maySuspendCommit`,
+    `startSuspendingCommit`, `suspendInstance`, `waitForCommitToBeReady`, `preloadInstance`,
+    `requestPostPaintCallback`, `shouldAttemptEagerTransition`, `resetFormInstance`,
+    `trackSchedulerEvent`, `resolveEventType`/`resolveEventTimeStamp`) and the two value
+    members (`NotPendingTransition`, `HostTransitionContext`) — no-ops/defaults for this renderer.
+  - Added the Offscreen visibility hooks (`hideInstance` / `unhideInstance` /
+    `hideTextInstance` / `unhideTextInstance`), wired to real subtree hiding (see Added).
+- **JSX intrinsics augmentation moved to `declare module "react"`** — React 19 dropped the
+  global `JSX` namespace, so the React-18-era `declare global { namespace JSX }` no longer
+  registered `<view>` / `<text>` under the `react-jsx` runtime.
+- Bumped dev/type deps to React 19 (`react@^19.2`, `@types/react@^19.2`).
+
+### Added
+
+- **Suspense / `<Activity>` visibility is now fully wired** (not just crash-safe). A `hidden`
+  flag on scene nodes — toggled by the reconciler's hide/unhide hooks when a `<Suspense>`
+  boundary flips to/from its fallback — is honored across the whole render pipeline: every
+  `collect*` paint/semantics/scroll/selection/editable pass, Yoga layout (`build` + `writeBack`
+  stay index-aligned, so a hidden subtree takes **no layout space** — the fallback flows
+  normally), hit-testing, page-scroll measurement, and the a11y overlay. A suspended subtree
+  paints nothing, takes no space, and receives no input, then fully reappears on resolve.
+  Suspending a field *while it's being edited* also releases the transparent text-input overlay
+  (so a focused, off-screen field can't keep capturing keystrokes or trap keyboard/AT focus).
+- **Runtime reconciler smoke test** (`test/reconciler.test.mjs`) — drives the production
+  concurrent root through mount → prop update → child add/remove → unmount and a full
+  `<Suspense>` re-suspend → resolve cycle, asserting the scene graph mutates correctly **and
+  that the hidden subtree is excluded from the visible tree then fully unhidden**. This closes
+  the prior gap where no test exercised the reconciler at runtime (so a wrong `commitUpdate`
+  signature or a broken visibility hook would have shipped silently).
+
 ## [0.2.0] — 2026-06-22
 
 First DX pass since the initial release: declarative mount, typed authoring components,
