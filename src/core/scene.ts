@@ -49,6 +49,9 @@ export interface Style {
   boxShadow?: ShadowSpec; // a drop shadow painted BEHIND the box (one analytic blurred rounded-rect)
   opacity?: number; // 0..1 GROUP opacity — the node + its whole subtree fade as ONE unit (composited
   // offscreen, so overlapping children don't double-darken). Default 1 (opaque). < 1 forms a group.
+  zIndex?: number; // lift this node + subtree to an OVERLAY layer painted above all normal content
+  // (modals / dropdowns / tooltips), sorted ascending by zIndex. Escapes ancestor scroll + overflow
+  // clip (a "top layer", like CSS position:fixed). Undefined = normal in-tree paint order.
   border?: number; // border/stroke width in CSS px — a hairline outline on the box edge (scales with zoom).
   // Ignored on glass/material nodes (use the glass rim). A sub-pixel width still paints a crisp ~1px line.
   borderColor?: RGBA; // border color (default: a faint light hairline). Works without a background; note a

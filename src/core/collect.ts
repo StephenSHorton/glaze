@@ -3,7 +3,7 @@
 // Pre-order = parents before children (paint order) and reading order (AT).
 import { type Camera, type ElementNode, type RGBA, firstText, textOf } from "./scene.ts";
 import type { ParticleSpec } from "./particles";
-import type { ClipRect, GlassPanel, ImageItem, MaterialPanel, OpacityGroup, Rect, ShadowItem, TextItem } from "./webgpu";
+import type { ClipRect, GlassPanel, ImageItem, MaterialPanel, OpacityGroup, Overlay, Rect, ShadowItem, TextItem } from "./webgpu";
 import type { SemNode } from "./a11y";
 import { measureWidth, selectionRects } from "./text.ts";
 import type { GlassParams } from "./glassTuning";
@@ -15,6 +15,16 @@ const opacityOf = (n: ElementNode): number | null => {
   const o = n.props.style?.opacity;
   return o != null && o < 1 ? Math.max(0, o) : null;
 };
+
+/** The overlay layer of a node if `style.zIndex` is a finite number, else null. Paint passes
+ *  (rects/texts/images/shadows) skip these subtrees — lifted by collectOverlays and painted on top
+ *  in z order; collectOpacityGroups also skips them (an overlay isn't ALSO a backdrop fade group);
+ *  semantics is layer-aware so the overlay is clickable on top. (Non-finite z → not an overlay.) */
+const zOf = (n: ElementNode): number | null => {
+  const z = n.props.style?.zIndex;
+  return z != null && Number.isFinite(z) ? z : null;
+};
+const SEM_OVERLAY = 1e9; // semantics/hit-test layer base: any overlay outranks all normal content
 
 const FOCUS_RING: RGBA = [0.35, 0.95, 1.0, 1];
 const GLASS_TINT: RGBA = [0.82, 0.87, 1, 1];
@@ -50,7 +60,7 @@ function intersect(a: ClipRect, b: ClipRect): ClipRect {
   return [x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0)];
 }
 
-export function collectRects(root: ElementNode, focusedId: number | null, cam: Camera, scroll: ScrollMap, baseClip?: ClipRect, baseSy = 0): Rect[] {
+export function collectRects(root: ElementNode, focusedId: number | null, cam: Camera, scroll: ScrollMap, baseClip?: ClipRect, baseSy = 0, skipOpacityGroups = true): Rect[] {
   const out: Rect[] = [];
   const walk = (n: ElementNode, clip: ClipRect | undefined, sy: number) => {
     const s = n.props.style ?? {};
@@ -76,7 +86,7 @@ export function collectRects(root: ElementNode, focusedId: number | null, cam: C
       if (s.overflow === "scroll") childSy = sy + (scroll.get(n.id) ?? 0);
     }
     // skip opacity-group subtrees — they're lifted + composited offscreen (collectOpacityGroups)
-    for (const c of n.children) if (c.kind === "element" && !c.hidden && opacityOf(c) == null) walk(c, childClip, childSy);
+    for (const c of n.children) if (c.kind === "element" && !c.hidden && (!skipOpacityGroups || opacityOf(c) == null) && zOf(c) == null) walk(c, childClip, childSy);
   };
   walk(root, baseClip, baseSy);
   return out;
@@ -107,7 +117,8 @@ export function collectImages(root: ElementNode, cam: Camera, scroll: ScrollMap)
     // NB: unlike collectRects, keep descending into glass/material subtrees — images render on the
     // backdrop (PASS 1.9), so an image inside a glass node is refracted UNDER that glass (intentional,
     // matches the documented material/opacity-in-glass limits). Most images are leaves anyway.
-    for (const c of n.children) if (c.kind === "element" && !c.hidden) walk(c, childClip, childSy);
+    // zIndex subtrees ARE skipped here — they're lifted to the overlay layer (collectOverlays).
+    for (const c of n.children) if (c.kind === "element" && !c.hidden && zOf(c) == null) walk(c, childClip, childSy);
   };
   walk(root, undefined, 0);
   return out;
@@ -144,13 +155,14 @@ export function collectShadows(root: ElementNode, cam: Camera, scroll: ScrollMap
       childClip = clip ? intersect(clip, own) : own;
       if (s.overflow === "scroll") childSy = sy + (scroll.get(n.id) ?? 0);
     }
-    for (const c of n.children) if (c.kind === "element" && !c.hidden) walk(c, childClip, childSy);
+    // skip zIndex subtrees — their shadows are lifted to the overlay layer (collectOverlays)
+    for (const c of n.children) if (c.kind === "element" && !c.hidden && zOf(c) == null) walk(c, childClip, childSy);
   };
   walk(root, undefined, 0);
   return out;
 }
 
-export function collectTexts(root: ElementNode, cam: Camera, scroll: ScrollMap, baseClip?: ClipRect, baseSy = 0): TextItem[] {
+export function collectTexts(root: ElementNode, cam: Camera, scroll: ScrollMap, baseClip?: ClipRect, baseSy = 0, skipOpacityGroups = true): TextItem[] {
   const out: TextItem[] = [];
   const walk = (n: ElementNode, clip: ClipRect | undefined, sy: number) => {
     const s = n.props.style ?? {};
@@ -179,7 +191,7 @@ export function collectTexts(root: ElementNode, cam: Camera, scroll: ScrollMap, 
       if (s.overflow === "scroll") childSy = sy + (scroll.get(n.id) ?? 0);
     }
     // skip opacity-group subtrees — lifted + composited offscreen (collectOpacityGroups)
-    for (const c of n.children) if (c.kind === "element" && !c.hidden && opacityOf(c) == null) walk(c, childClip, childSy);
+    for (const c of n.children) if (c.kind === "element" && !c.hidden && (!skipOpacityGroups || opacityOf(c) == null) && zOf(c) == null) walk(c, childClip, childSy);
   };
   walk(root, baseClip, baseSy);
   return out;
@@ -205,6 +217,7 @@ export function collectOpacityGroups(root: ElementNode, cam: Camera, scroll: Scr
     }
     for (const c of n.children) {
       if (c.kind !== "element" || c.hidden) continue;
+      if (zOf(c) != null) continue; // overlay subtree — lifted by collectOverlays, NOT a backdrop fade group
       const op = opacityOf(c);
       if (op != null) {
         // lift c's subtree at the inherited clip/scroll (collectRects/collectTexts exclude nested groups)
@@ -214,6 +227,39 @@ export function collectOpacityGroups(root: ElementNode, cam: Camera, scroll: Scr
     }
   };
   walk(root, undefined, 0);
+  return out;
+}
+
+/** Overlay layers (style.zIndex) → each z-lifted subtree collected fresh as a "top layer" that
+ *  ESCAPES ancestor scroll + overflow clip (sy=0, clip=undefined, like CSS position:fixed) — for
+ *  modals / dropdowns / tooltips. The paint passes (rects/texts/images/shadows) skip these subtrees;
+ *  the painter draws this list IN ORDER (sorted ascending by zIndex — last = on top) above all normal
+ *  content. Nested overlays are flattened into one z-sorted list. v1: glass/material/particles and
+ *  group-opacity INSIDE an overlay aren't lifted with it (documented). */
+export function collectOverlays(root: ElementNode, focusedId: number | null, cam: Camera, scroll: ScrollMap): Overlay[] {
+  const out: Overlay[] = [];
+  const walk = (n: ElementNode) => {
+    for (const c of n.children) {
+      if (c.kind !== "element" || c.hidden) continue;
+      const z = zOf(c);
+      if (z != null) {
+        // Collect the subtree FRESH (all four collectors start clip=undefined, sy=0) so the overlay
+        // escapes ancestor overflow clip + scroll — a "top layer". skipOpacityGroups=false makes a
+        // group-opacity element INSIDE the overlay render inline (un-faded) instead of being dropped
+        // (its fade isn't lifted here — a documented v1 limit).
+        out.push({
+          zIndex: z,
+          shadows: collectShadows(c, cam, scroll),
+          rects: collectRects(c, focusedId, cam, scroll, undefined, 0, false),
+          images: collectImages(c, cam, scroll),
+          texts: collectTexts(c, cam, scroll, undefined, 0, false),
+        });
+      }
+      walk(c); // keep descending — nested overlays are lifted by their own zIndex
+    }
+  };
+  walk(root);
+  out.sort((a, b) => a.zIndex - b.zIndex); // stable ascending: equal z keeps tree order, last painted on top
   return out;
 }
 
@@ -312,19 +358,25 @@ export function collectGlass(root: ElementNode, cam: Camera, scroll: ScrollMap, 
 
 export function collectSemantics(root: ElementNode, cam: Camera, scroll: ScrollMap): SemNode[] {
   const out: SemNode[] = [];
-  const walk = (n: ElementNode, clip: ClipRect | undefined, sy: number) => {
+  const walk = (n: ElementNode, clip: ClipRect | undefined, sy: number, layer: number) => {
     const s = n.props.style ?? {};
     const p = n.props;
+    // A zIndex node is an overlay: its proxy must stack ABOVE normal proxies (so it's clickable on top,
+    // matching the paint) and escape ancestor scroll + overflow clip (so its hit-area matches where it
+    // paints and it isn't dropped as "scrolled out"). Mirrors the painter + the public hitTest.
+    const z = zOf(n);
+    const eff = z != null ? 0 : sy;
+    const cl = z != null ? undefined : clip;
+    const lay = z != null ? SEM_OVERLAY + z : layer;
     const role = p.role;
     const draggable = p.draggable;
     if (role || draggable || p.onActivate || p.onPointerEnter || p.onPointerLeave) {
       const x = n.x * cam.scale + cam.tx;
-      const y = (n.y - sy) * cam.scale + cam.ty;
+      const y = (n.y - eff) * cam.scale + cam.ty;
       const w = n.w * cam.scale;
       const h = n.h * cam.scale;
-      // Skip proxies fully scrolled out of their clip (so AT/find-in-page don't
-      // land on hidden rows).
-      const visible = !clip || (x + w > clip[0] && y + h > clip[1] && x < clip[0] + clip[2] && y < clip[1] + clip[3]);
+      // Skip proxies fully scrolled out of their clip (so AT/find-in-page don't land on hidden rows).
+      const visible = !cl || (x + w > cl[0] && y + h > cl[1] && x < cl[0] + cl[2] && y < cl[1] + cl[3]);
       if (visible) {
         out.push({
           id: String(n.id),
@@ -333,6 +385,7 @@ export function collectSemantics(root: ElementNode, cam: Camera, scroll: ScrollM
           onDrag: p.onDrag,
           label: p.ariaLabel ?? firstText(n),
           rect: { x, y, width: w, height: h },
+          layer: lay, // 0 = normal; >0 = overlay (a11y stacks the proxy by this so it's clickable on top)
           focusable: role === "button" || !!draggable,
           level: p.level,
           onActivate: p.onActivate,
@@ -341,16 +394,16 @@ export function collectSemantics(root: ElementNode, cam: Camera, scroll: ScrollM
         });
       }
     }
-    let childClip = clip;
-    let childSy = sy;
+    let childClip = cl;
+    let childSy = eff;
     if (s.overflow) {
-      const own: ClipRect = [n.x * cam.scale + cam.tx, (n.y - sy) * cam.scale + cam.ty, n.w * cam.scale, n.h * cam.scale];
-      childClip = clip ? intersect(clip, own) : own;
-      if (s.overflow === "scroll") childSy = sy + (scroll.get(n.id) ?? 0);
+      const own: ClipRect = [n.x * cam.scale + cam.tx, (n.y - eff) * cam.scale + cam.ty, n.w * cam.scale, n.h * cam.scale];
+      childClip = cl ? intersect(cl, own) : own;
+      if (s.overflow === "scroll") childSy = eff + (scroll.get(n.id) ?? 0);
     }
-    for (const c of n.children) if (c.kind === "element" && !c.hidden) walk(c, childClip, childSy);
+    for (const c of n.children) if (c.kind === "element" && !c.hidden) walk(c, childClip, childSy, lay);
   };
-  walk(root, undefined, 0);
+  walk(root, undefined, 0, 0);
   return out;
 }
 

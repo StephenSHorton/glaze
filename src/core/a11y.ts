@@ -9,6 +9,8 @@ export interface SemNode {
   role?: Role; // undefined => a plain interactive region (e.g. draggable / hover)
   label: string;
   rect: { x: number; y: number; width: number; height: number };
+  layer?: number; // overlay stacking layer (0 = normal); the proxy's CSS z-index, so an overlay
+  // (style.zIndex) is clickable above the content it paints over, regardless of DOM/tree order.
   focusable: boolean;
   level?: number;
   draggable?: boolean;
@@ -188,6 +190,7 @@ export class SemanticsOverlay {
     el.style.transform = `translate(${r.x}px, ${r.y}px)`;
     el.style.width = `${r.width}px`;
     el.style.height = `${r.height}px`;
+    el.style.zIndex = node.layer ? String(node.layer) : ""; // overlay proxies stack above normal ones (clickable on top)
     el.setAttribute("aria-label", node.label);
     // Headings, paragraphs, and role-less regions (graph nodes) carry real text so
     // Cmd+F / find-in-page locates them and screen readers read them.

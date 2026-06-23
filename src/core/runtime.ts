@@ -15,6 +15,7 @@ import {
   collectRects,
   collectShadows,
   collectImages,
+  collectOverlays,
   collectOpacityGroups,
   collectTexts,
   collectSemantics,
@@ -638,7 +639,7 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
       particles,
       post: collectPostProcess(root, camera, scrollY), // a node's postProcess prop → effect masked to its box
       bgScroll: Math.max(0, ...scrollY.values()), // page scroll → the background shader scrolls with it
-    }, collectShadows(root, camera, scrollY), collectOpacityGroups(root, camera, scrollY), collectImages(root, camera, scrollY)); // shadows behind; opacity groups composited offscreen; images over rects, under glass
+    }, collectShadows(root, camera, scrollY), collectOpacityGroups(root, camera, scrollY), collectImages(root, camera, scrollY), collectOverlays(root, focusedId, camera, scrollY)); // shadows behind; opacity offscreen; images under glass; overlays (zIndex) on top
     overlay.syncFromScene(collectSemantics(root, camera, scrollY));
     // animated materials + particles drive a continuous repaint loop
     if (materialsPresent && materials.some((m) => m.animated)) container.dirty = true;
@@ -765,16 +766,22 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
       const root = rootElement();
       if (!root) return null;
       let hit: number | null = null;
-      const walk = (n: ElementNode, scrollOff: number) => {
+      let bestLayer = -Infinity; // higher = on top: overlays (zIndex) beat normal content; within a layer, deepest-last wins
+      const OVERLAY = 1e9; // any overlay outranks all normal content, regardless of its numeric zIndex
+      const walk = (n: ElementNode, scrollOff: number, layer: number) => {
+        const z = n.props.style?.zIndex;
+        const isZ = z != null;
+        const eff = isZ ? 0 : scrollOff; // an overlay escapes ancestor scroll (painted at sy=0) — match paint
+        const lay = isZ ? OVERLAY + z : layer;
         const sx = n.x * camera.scale + camera.tx;
-        const sy = (n.y - scrollOff) * camera.scale + camera.ty;
+        const sy = (n.y - eff) * camera.scale + camera.ty;
         const sw = n.w * camera.scale;
         const sh = n.h * camera.scale;
-        if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) hit = n.id; // deepest contained node wins
-        const childScroll = n.props.style?.overflow === "scroll" ? scrollOff + (scrollY.get(n.id) ?? 0) : scrollOff;
-        for (const c of n.children) if (c.kind === "element" && !c.hidden) walk(c, childScroll);
+        if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh && lay >= bestLayer) { hit = n.id; bestLayer = lay; }
+        const childScroll = n.props.style?.overflow === "scroll" ? eff + (scrollY.get(n.id) ?? 0) : eff;
+        for (const c of n.children) if (c.kind === "element" && !c.hidden) walk(c, childScroll, lay);
       };
-      walk(root, 0);
+      walk(root, 0, 0);
       return hit;
     },
     getCanvas() {

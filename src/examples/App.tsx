@@ -53,6 +53,13 @@ export function App() {
         </Text>
       </View>
 
+      {/* zIndex overlay: authored EARLY in the tree (before the node cards) but lifted to the overlay
+          layer, so it paints ON TOP of the absolute node cards below — a top-layer modal/dropdown/tooltip. */}
+      <View style={{ absolute: { x: 360, y: 150 }, zIndex: 100, width: 300, height: 150, radius: 16, direction: "column", padding: 20, gap: 8, background: [0.12, 0.14, 0.22, 0.98], border: 1, borderColor: [1, 1, 1, 0.16], boxShadow: { y: 18, blur: 44, color: [0, 0, 0, 0.6] } }}>
+        <Text style={{ fontSize: 17, fontWeight: 800, color: WHITE }}>Overlay (zIndex: 100)</Text>
+        <Text style={{ fontSize: 13, color: MUTED }}>Authored before the node cards, yet painted above them — a top-layer modal/dropdown/tooltip.</Text>
+      </View>
+
       {/* Reserves the editor area the absolute nodes + glass occupy. */}
       <View style={{ width: "stretch", height: 360 }} />
 

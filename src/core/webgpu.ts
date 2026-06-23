@@ -30,6 +30,16 @@ export interface OpacityGroup {
   texts: TextItem[];
 }
 
+// An overlay layer (style.zIndex): a z-lifted subtree painted ABOVE all normal content, sorted by
+// zIndex. Carries its own shadows/rects/images/texts (all SCREEN px — collectOverlays applies the camera).
+export interface Overlay {
+  zIndex: number;
+  shadows: ShadowItem[];
+  rects: Rect[];
+  images: ImageItem[];
+  texts: TextItem[];
+}
+
 // A drop shadow instance — all coords/lengths in SCREEN px (collectShadows applies the camera).
 export interface ShadowItem {
   x: number; // node box (screen px)
@@ -1354,7 +1364,7 @@ export class Painter {
       if (!g) groups.set(img.src, (g = []));
       g.push(img);
     }
-    const tick = ++this.imageTick;
+    const tick = this.imageTick; // bumped once per frame in frameImpl (drawImages runs >1×: main + overlays)
     const ready: { bindGroup: GPUBindGroup; aspect: number; items: ImageItem[] }[] = [];
     let total = 0;
     for (const [src, items] of groups) {
@@ -1367,7 +1377,6 @@ export class Painter {
         total += items.length;
       }
     }
-    this.evictImages(tick); // bound the cache: drop LRU textures for srcs not used this frame
     if (!total) return;
     const buf = this.device.createBuffer({ size: total * 48, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     const data = new Float32Array(total * 12);
@@ -1406,6 +1415,35 @@ export class Painter {
       e.tex?.destroy();
       this.images.delete(src);
       over--;
+    }
+  }
+
+  // Draw overlay layers (style.zIndex) on top of the scene, in the pre-sorted ascending-z order
+  // (last = topmost). Each overlay paints into `view` (loadOp 'load'): shadows behind, then rects,
+  // glyphs, and images. Screen-space (collectOverlays applied the camera), so the identity-camera
+  // vp bind groups apply. Per-overlay buffers are freed after submit (pendingBuffers).
+  private drawOverlays(encoder: GPUCommandEncoder, view: GPUTextureView, overlays: Overlay[]) {
+    for (const ov of overlays) {
+      const shadowBuf = ov.shadows.length ? this.uploadShadows(ov.shadows) : null;
+      const rectBuf = this.uploadRects(ov.rects);
+      const p = encoder.beginRenderPass({ colorAttachments: [{ view, loadOp: "load", storeOp: "store" }] });
+      if (shadowBuf) {
+        p.setPipeline(this.shadowPipeline);
+        p.setBindGroup(0, this.shadowVpBindGroup);
+        p.setVertexBuffer(0, shadowBuf);
+        p.draw(6, ov.shadows.length);
+      }
+      if (rectBuf) {
+        p.setPipeline(this.rectPipeline);
+        p.setBindGroup(0, this.rectVpBindGroup);
+        p.setVertexBuffer(0, rectBuf);
+        p.draw(6, ov.rects.length);
+      }
+      this.drawGlyphs(p, ov.texts);
+      this.drawImages(p, ov.images);
+      p.end();
+      if (shadowBuf) this.pendingBuffers.push(shadowBuf);
+      if (rectBuf) this.pendingBuffers.push(rectBuf);
     }
   }
 
@@ -1545,21 +1583,22 @@ export class Painter {
   // Public frame entry: a no-op once the device is lost, and a synchronous GPU throw mid-frame
   // (device lost before the async device.lost handler fires) is caught and routed to
   // onDeviceError instead of escaping the render loop / rAF callback.
-  frame(rects: Rect[], texts: TextItem[], glass: GlassPanel[], fg?: { rects: Rect[]; texts: TextItem[] }, materials?: MaterialPanel[], info?: FrameInfo, shadows?: ShadowItem[], opacityGroups?: OpacityGroup[], images?: ImageItem[]) {
+  frame(rects: Rect[], texts: TextItem[], glass: GlassPanel[], fg?: { rects: Rect[]; texts: TextItem[] }, materials?: MaterialPanel[], info?: FrameInfo, shadows?: ShadowItem[], opacityGroups?: OpacityGroup[], images?: ImageItem[], overlays?: Overlay[]) {
     if (this.lost) return;
     try {
-      this.frameImpl(rects, texts, glass, fg, materials, info, shadows, opacityGroups, images);
+      this.frameImpl(rects, texts, glass, fg, materials, info, shadows, opacityGroups, images, overlays);
     } catch (e) {
       this.handleFrameError(e);
     }
   }
 
-  private frameImpl(rects: Rect[], texts: TextItem[], glass: GlassPanel[], fg?: { rects: Rect[]; texts: TextItem[] }, materials?: MaterialPanel[], info?: FrameInfo, shadows?: ShadowItem[], opacityGroups?: OpacityGroup[], images?: ImageItem[]) {
+  private frameImpl(rects: Rect[], texts: TextItem[], glass: GlassPanel[], fg?: { rects: Rect[]; texts: TextItem[] }, materials?: MaterialPanel[], info?: FrameInfo, shadows?: ShadowItem[], opacityGroups?: OpacityGroup[], images?: ImageItem[], overlays?: Overlay[]) {
     const { cssWidth, cssHeight } = this.resize();
     const fbw = this.canvas.width;
     const fbh = this.canvas.height;
     const dpr = fbw / cssWidth;
     this.ensureBackdrop(fbw, fbh);
+    this.imageTick++; // one LRU tick per FRAME (drawImages runs >1× — main PASS 1.9 + per-overlay)
     // identity camera — rects from collectRects() are already screen-space.
     this.device.queue.writeBuffer(this.vpBuffer, 0, new Float32Array([cssWidth, cssHeight, 0, 0, 0, 0, 1, 0]));
 
@@ -1685,6 +1724,11 @@ export class Painter {
       this.drawParticles(pp, info.particles);
       pp.end();
     }
+
+    // PASS 4.5 — OVERLAYS (style.zIndex): z-lifted subtrees painted on top of all scene content,
+    // in ascending z order (last = topmost). Each draws its own shadows → rects → glyphs → images.
+    if (overlays && overlays.length) this.drawOverlays(encoder, finalView, overlays);
+    this.evictImages(this.imageTick); // once per frame, AFTER all drawImages (main + overlays) marked usage
 
     // PASS 5 — post-process bloom: sceneTex -> canvas, masked to the region (CSS px -> fb px).
     if (post) {
