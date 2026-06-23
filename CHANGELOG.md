@@ -13,8 +13,10 @@ All notable changes to Kussetsu are documented here. This project adheres to
   WebGPU-unsupported fallback isn't shown, and **no GPU/shader error reaches the console**. This
   is the one check the headless Node suite + `vite build` can't do — a WGSL compile/validation
   error only surfaces when the GPU creates/uses a pipeline (it would have caught the box-shadow
-  `fwidth` bug). Kept a separate CI workflow so any headless-WebGPU flakiness doesn't block the
-  main suite. (Road to 1.0 — Pillar 2)
+  `fwidth` bug). Runs for real locally / on any WebGPU-capable machine; **skips green** on a
+  GPU-less runner (the standard GitHub Actions box has no WebGPU adapter even with software
+  Vulkan), and auto-activates if a WebGPU-capable runner is used. Separate CI workflow so it
+  never blocks the main suite. (Road to 1.0 — Pillar 2)
 
 - **`opacity` Style field — true group opacity** (`0..1`). A node with `opacity < 1` and its whole
   subtree fade as **one unit**: the subtree renders at full alpha into an offscreen texture, then
