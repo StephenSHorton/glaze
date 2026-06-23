@@ -700,17 +700,65 @@ export class Painter {
     if (!adapter) throw new Error("No GPUAdapter");
     const p = new Painter(canvas);
     p.device = await adapter.requestDevice();
-    p.device.lost.then((info) => {
-      p.lost = true; // stop painting on a dead device (the runtime also reacts via its own device.lost)
-      console.error("WebGPU device lost:", info.reason, info.message);
-    });
-    p.device.addEventListener("uncapturederror", (e) => console.error("[webgpu uncaptured]", (e as GPUUncapturedErrorEvent).error.message));
+    p.attachDeviceHandlers();
     p.context = canvas.getContext("webgpu") as GPUCanvasContext;
     p.format = navigator.gpu.getPreferredCanvasFormat();
     p.context.configure({ device: p.device, format: p.format, alphaMode: "premultiplied" });
     p.build();
     p.resize();
     return p;
+  }
+
+  // Wire the current device's loss + uncaptured-error handlers. Re-run after recover() re-acquires
+  // a device. A loss routes to onDeviceError (the runtime attempts recovery); "destroyed" is our
+  // own teardown, not a loss, so it's ignored.
+  private attachDeviceHandlers() {
+    this.device.lost.then((info) => {
+      if (info.reason === "destroyed") return;
+      this.lost = true; // stop painting on the dead device until recovery rebuilds
+      console.error("WebGPU device lost:", info.reason, info.message);
+      this.onDeviceError?.({ reason: String(info.reason), message: info.message });
+    });
+    this.device.addEventListener("uncapturederror", (e) => console.error("[webgpu uncaptured]", (e as GPUUncapturedErrorEvent).error.message));
+  }
+
+  /** Re-acquire the GPU device and rebuild ALL device-owned resources on the same canvas after a
+   *  loss. The scene tree (React state) is untouched — only GPU resources died — so the runtime
+   *  just resumes its loop + repaints. Returns false if re-acquisition fails (caller gives up). */
+  async recover(): Promise<boolean> {
+    try {
+      if (!navigator.gpu) return false;
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) return false;
+      this.device = await adapter.requestDevice();
+      this.lost = false;
+      this.attachDeviceHandlers();
+      this.context.configure({ device: this.device, format: this.format, alphaMode: "premultiplied" });
+      // Drop every cache/handle tied to the dead device, then rebuild from scratch.
+      this.glyphCache.clear();
+      this.packX = 1;
+      this.packY = 1;
+      this.packRowH = 0;
+      this.warnedAtlasFull = false;
+      this.materialPipelines.clear();
+      this.badShaders.clear();
+      this.warnedUniforms.clear();
+      this.glassBuffers.length = 0;
+      this.materialBuffers.length = 0;
+      this.pendingBuffers.length = 0;
+      this.nodeBuffer = null;
+      this.nodeCount = 0;
+      this.nodeCap = 0;
+      this.backdropTex = null; // force ensureBackdrop (via resize) to rebuild every render target
+      this.backdropW = 0;
+      this.backdropH = 0;
+      this.build();
+      this.resize();
+      return true;
+    } catch (e) {
+      console.error("[gpu-renderer] device recovery failed:", e instanceof Error ? e.message : e);
+      return false;
+    }
   }
 
   private build() {

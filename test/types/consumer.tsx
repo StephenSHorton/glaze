@@ -81,6 +81,7 @@ async function boot() {
     textSelectable: true,
     debug: true,
     onDeviceLost: (info) => console.warn(info.reason, info.message),
+    onDeviceRestored: () => console.info("gpu restored"),
     onError: (err) => console.error(err),
   });
   root.render(<App />);

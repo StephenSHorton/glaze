@@ -109,9 +109,11 @@ boot(); // wrapped (not bare top-level await) so it compiles on every toolchain
 - `textSelectable` (default `false`) — all text is drag-selectable + copyable.
 - `background` — a full-screen WGSL background shader (`fn material(uv, px) -> vec4f`)
   rendered into the backdrop, so glass refracts it.
-- `onDeviceLost(info)` — the WebGPU device was lost (GPU crash/reset, sleep/wake, TDR).
-  Kussetsu stops the render loop so it never paints a dead device; there's **no
-  auto-recovery**, so prompt a reload. (`<GpuCanvas>` also shows its `fallback`.)
+- `onDeviceLost(info)` — the WebGPU device was lost (GPU crash/reset, sleep/wake, TDR) **and
+  auto-recovery failed**. Kussetsu first re-acquires the device and rebuilds GPU resources in
+  place (the React tree is untouched — no reload, no lost state); this fires only if that gives
+  up, so the app can prompt a reload. (`<GpuCanvas>` shows its `fallback` only then.)
+- `onDeviceRestored()` — a lost device was re-acquired and the scene repainted in place. Advisory.
 - `onError(error)` — an uncaptured GPU error (validation / out-of-memory). Advisory.
 - `debug` (default `false`) — show a small corner perf overlay (fps · frame-ms · draw counts).
   A single opaque canvas hides DevTools' element/perf panels; this puts a readout back.

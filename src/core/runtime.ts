@@ -47,10 +47,14 @@ export interface GpuRootOptions {
   /** Full-screen WGSL background shader (`fn material(uv,px)->vec4f`) rendered into the backdrop,
    *  so glass refracts it. Same template/helpers as props.material. */
   background?: string;
-  /** Called if the WebGPU device is lost (GPU crash/reset, sleep/wake, TDR). Kussetsu stops the
-   *  render loop so it doesn't paint a dead device; there is no auto-recovery — prompt a reload.
-   *  Not called for a normal `destroy()`. */
+  /** Called if the WebGPU device is lost (GPU crash/reset, sleep/wake, TDR) AND auto-recovery
+   *  fails. Kussetsu first tries to re-acquire the device and rebuild GPU resources in place
+   *  (the React tree is untouched); this fires only if that gives up, so the app can prompt a
+   *  reload. Not called for a normal `destroy()`. */
   onDeviceLost?: (info: { reason: string; message: string }) => void;
+  /** Called after a lost device is successfully re-acquired and the scene repainted in place
+   *  (no reload needed). */
+  onDeviceRestored?: () => void;
   /** Called with uncaptured GPU errors (validation/out-of-memory). Advisory; the loop continues. */
   onError?: (error: unknown) => void;
   /** Show a small dev perf overlay (fps · frame-ms · draw counts) in the corner. Default false.
@@ -679,26 +683,36 @@ export async function createGpuRoot(canvas: HTMLCanvasElement, options: GpuRootO
   rafId = requestAnimationFrame(rafLoop);
   timerId = window.setTimeout(timerLoop, 200);
 
-  // WebGPU device loss (GPU crash/reset, sleep/wake, TDR) is otherwise a silent permanent
-  // freeze: React state + the a11y overlay keep updating while the canvas paints nothing, and
-  // the loop keeps calling into a dead device. Stop the loops and tell the consumer — there's
-  // no auto-recovery, so the app should prompt a reload. Reason "destroyed" is our own teardown,
-  // not a loss, so skip it.
+  // WebGPU device loss (GPU crash/reset, sleep/wake, TDR) is otherwise a silent permanent freeze.
+  // RECOVER in place: stop the loops, re-acquire the device + rebuild GPU resources (the React tree
+  // is intact), then resume + repaint — no reload. Only if recovery FAILS do we give up and call
+  // onDeviceLost. Both the async device.lost (Painter.attachDeviceHandlers) and a synchronous
+  // mid-frame GPU throw (Painter.frame) route through painter.onDeviceError; "destroyed" (our own
+  // teardown) is filtered out in the Painter, so this never fires for destroy().
   let torndown = false;
-  const haltOnDeviceLoss = (info: { reason: string; message: string }) => {
-    if (torndown || stopped) return; // already tearing down / already halted
+  let recovering = false;
+  let recoveries = 0;
+  const MAX_RECOVERIES = 8; // backstop against a pathological loss → recover → loss loop
+  painter.onDeviceError = async (info) => {
+    if (torndown || recovering) return;
     stopped = true;
     cancelAnimationFrame(rafId);
     clearTimeout(timerId);
-    opts.onDeviceLost?.(info);
+    recovering = true;
+    const ok = recoveries++ < MAX_RECOVERIES && (await painter.recover());
+    recovering = false;
+    if (torndown) return; // destroyed mid-recovery
+    if (ok) {
+      stopped = false;
+      container.dirty = true; // repaint the (intact) scene with the rebuilt GPU resources
+      rafId = requestAnimationFrame(rafLoop);
+      timerId = window.setTimeout(timerLoop, 200);
+      console.info("[kussetsu] WebGPU device recovered");
+      opts.onDeviceRestored?.();
+    } else {
+      opts.onDeviceLost?.(info); // gave up — the app should prompt a reload
+    }
   };
-  painter.device.lost.then((info) => {
-    if (info.reason === "destroyed") return; // our own painter.destroy(), not a real loss
-    haltOnDeviceLoss({ reason: String(info.reason), message: info.message });
-  });
-  // A synchronous GPU throw mid-frame (device lost before the async device.lost resolves) is
-  // caught in Painter.frame and routed here, so the loop stops + the app is notified either way.
-  painter.onDeviceError = haltOnDeviceLoss;
   if (opts.onError) {
     painter.device.addEventListener("uncapturederror", (e) => {
       opts.onError!((e as GPUUncapturedErrorEvent).error);
