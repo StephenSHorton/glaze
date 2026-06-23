@@ -21,4 +21,6 @@ jobs:
       - run: npm ci
       # the full Chromium (channel: "chromium") + its OS deps — the headless-shell has no WebGPU
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser # builds dist-site, then drives it in headless WebGPU
+      # lavapipe = a software Vulkan device so Dawn (WebGPU) gets an adapter on this GPU-less runner
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      - run: npm run test:browser # builds dist-site, then drives it in headless WebGPU (or SKIPs if still no adapter)
