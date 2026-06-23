@@ -148,8 +148,12 @@ Draw an **image** with `<Image src="…" />` (or the `image={{ src, fit }}` prop
 Sources can be URLs, data URIs, or **SVG** (CORS-enabled remote images work); each `src` loads once,
 async, then repaints. `fit` is `cover` (default — fill + crop), `contain` (whole image, letterboxed),
 or `fill` (stretch). The image is clipped to the box's `radius` — `radius = ½ size` makes a circular
-avatar. (Today an image paints above its box's own fill/text — ideal for icons/avatars/photos/logos;
-a full-bleed image *behind* its own text awaits the z-index/stacking work.)
+avatar. (An image paints above its box's own fill/text — ideal for icons/avatars/photos/logos.)
+
+`zIndex` (a number) lifts a node + subtree to an **overlay layer** painted above all normal content
+(overlays sorted ascending by `zIndex`) — for modals, dropdowns, tooltips. It's a **top layer**: it
+escapes ancestor `overflow` clip + scroll (like `position: fixed`), and hit-testing is z-aware (it
+receives clicks above what it covers). Pair it with `absolute: { x, y }` to place a popover.
 
 The `GpuRoot` exposes imperative escapes too: `getCamera()` / `setCamera({ tx?, ty?, scale? })`
 / `resetCamera()` to drive pan-zoom, `hitTest(x, y)` (the node id at a canvas point),

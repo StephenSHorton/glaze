@@ -7,6 +7,20 @@ All notable changes to Kussetsu are documented here. This project adheres to
 
 ### Added
 
+- **`zIndex` — overlay / stacking layer.** `style.zIndex` (a number) lifts a node + its subtree to an
+  **overlay layer** painted above all normal content, with overlays sorted ascending by `zIndex`
+  (higher = on top) — the building block for modals, dropdowns, tooltips, and popovers. An overlay
+  is a **top layer**: it escapes ancestor `overflow` clip and scroll (like CSS `position: fixed`), so
+  a dropdown isn't clipped by its container and a tooltip stays put as the page scrolls. **Hit-testing
+  is z-aware** — an overlay receives clicks above the content it covers, regardless of tree order, and
+  its content stays in the accessibility tree. Carries the node's rects, text, images, and box-shadow.
+  (Road to 1.0 — Pillar 3, feature win)
+  - v1 limitations (documented): the overlay layer paints solid content (rects/text/images/shadows);
+    `glass` / `material` / `particles` inside an overlay aren't lifted with it, and a group-`opacity`
+    element inside an overlay renders **un-faded** (its fade isn't carried into the layer; `opacity` on
+    the overlay node itself is ignored). Overlays don't *trap* background scroll/pan/selection — for a
+    true modal, add a full-screen overlay rect to capture input behind it.
+
 - **Image / icon / texture drawing** — a node can now render an image: `<Image src="…" />` (sugar) or
   `<View image={{ src, fit }} />` (the `image` prop on any node). Sources are URLs, data URIs, blob URLs,
   or **SVG** (loaded via an `<img>` so SVG decodes; CORS-enabled remote images work). Each `src` is fetched

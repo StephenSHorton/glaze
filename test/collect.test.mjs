@@ -9,7 +9,7 @@
 //
 // Run: node test/collect.test.mjs   (Node >=23 strips TS types, resolves .ts imports)
 import { makeHarness, approx, approxArr, el, container, placed } from "./helpers.mjs";
-import { collectRects, collectShadows, collectOpacityGroups, collectTexts, collectSemantics, collectScrollRegions } from "../src/core/collect.ts";
+import { collectRects, collectShadows, collectOpacityGroups, collectOverlays, collectImages, collectTexts, collectSemantics, collectScrollRegions } from "../src/core/collect.ts";
 
 const { ok, done } = makeHarness();
 
@@ -382,6 +382,69 @@ const NOSCROLL = new Map();
   card.hidden = true;
   const root = placed(el("view", {}, card), 0, 0, 100, 100);
   ok("hidden opacity group excluded from collectOpacityGroups", collectOpacityGroups(root, ID, NOSCROLL).length === 0);
+}
+
+// ── collectOverlays (zIndex → overlay layer) ───────────────────────────────────
+{
+  // an overlay authored EARLY, a normal sibling AFTER it
+  const modalBg = [0.1, 0.12, 0.2, 1];
+  const modal = placed(el("view", { style: { zIndex: 100, background: modalBg }, role: "button", ariaLabel: "OK" }, placed(el("text", {}, "OK"), 5, 5, 20, 16)), 40, 40, 200, 120);
+  const normal = placed(el("view", { style: { background: [0, 1, 0, 1] } }), 0, 0, 300, 300);
+  const root = placed(el("view", {}, modal, normal), 0, 0, 400, 400);
+
+  const ov = collectOverlays(root, null, ID, NOSCROLL);
+  ok("zIndex node forms one overlay at its z", ov.length === 1 && ov[0].zIndex === 100);
+  ok("overlay carries the node's rect", ov[0].rects.some((r) => approxArr(r.color, modalBg)));
+  ok("overlay carries the node's text", ov[0].texts.some((t) => t.text === "OK"));
+  ok("main collectRects EXCLUDES the overlay (lifted)", !collectRects(root, null, ID, NOSCROLL).some((r) => approxArr(r.color, modalBg)));
+  ok("main collectRects keeps the normal sibling", collectRects(root, null, ID, NOSCROLL).some((r) => approxArr(r.color, [0, 1, 0, 1])));
+  ok("main collectTexts EXCLUDES the overlay text", !collectTexts(root, ID, NOSCROLL).some((t) => t.text === "OK"));
+  // the overlay button is clickable ON TOP: its SemNode carries a layer > 0; normal content is 0
+  const sem = collectSemantics(root, ID, NOSCROLL);
+  ok("overlay button SemNode has layer > 0", (sem.find((s) => s.label === "OK")?.layer ?? 0) > 0);
+}
+// overlays sort ascending by zIndex (last = on top)
+{
+  const a = placed(el("view", { style: { zIndex: 5, background: [1, 0, 0, 1] } }), 0, 0, 50, 50);
+  const b = placed(el("view", { style: { zIndex: 50, background: [0, 0, 1, 1] } }), 0, 0, 50, 50);
+  const root = placed(el("view", {}, b, a), 0, 0, 200, 200); // b authored first, lower-z a second
+  const ov = collectOverlays(root, null, ID, NOSCROLL);
+  ok("overlays sorted ascending by zIndex (5 before 50)", ov.length === 2 && ov[0].zIndex === 5 && ov[1].zIndex === 50);
+}
+// BLOCKER regression: a node with BOTH opacity AND zIndex is drawn ONCE (overlay wins), never as a backdrop fade group
+{
+  const c = [1, 1, 1, 1];
+  const both = placed(el("view", { style: { opacity: 0.5, zIndex: 10, background: c } }), 0, 0, 80, 80);
+  const root = placed(el("view", {}, both), 0, 0, 200, 200);
+  ok("opacity+zIndex → in collectOverlays once", collectOverlays(root, null, ID, NOSCROLL).filter((o) => o.rects.some((r) => approxArr(r.color, c))).length === 1);
+  ok("opacity+zIndex → NOT a backdrop opacity group", collectOpacityGroups(root, ID, NOSCROLL).length === 0);
+  ok("opacity+zIndex → NOT in main rects", !collectRects(root, null, ID, NOSCROLL).some((r) => approxArr(r.color, c)));
+}
+// opacity INSIDE an overlay renders un-faded in the overlay (not dropped, not misplaced on the backdrop)
+{
+  const inner = [0, 1, 1, 1];
+  const faded = placed(el("view", { style: { opacity: 0.5, background: inner } }), 10, 10, 40, 40);
+  const modal = placed(el("view", { style: { zIndex: 10, background: [0.1, 0.1, 0.1, 1] } }, faded), 0, 0, 120, 120);
+  const root = placed(el("view", {}, modal), 0, 0, 300, 300);
+  ok("opacity inside an overlay renders in the overlay (un-faded)", collectOverlays(root, null, ID, NOSCROLL)[0].rects.some((r) => approxArr(r.color, inner)));
+  ok("opacity inside an overlay is NOT a backdrop fade group", collectOpacityGroups(root, ID, NOSCROLL).length === 0);
+}
+// images + shadows are lifted into the overlay (not drawn in the main passes)
+{
+  const modal = placed(el("view", { style: { zIndex: 10, boxShadow: { blur: 8 } } }, placed(el("view", { image: { src: "x.png" }, style: {} }), 5, 5, 30, 30)), 0, 0, 100, 100);
+  const root = placed(el("view", {}, modal), 0, 0, 200, 200);
+  const ov = collectOverlays(root, null, ID, NOSCROLL)[0];
+  ok("overlay lifts its image", ov.images.some((i) => i.src === "x.png"));
+  ok("overlay lifts its shadow", ov.shadows.length === 1);
+  ok("main collectImages excludes the overlay image", !collectImages(root, ID, NOSCROLL).some((i) => i.src === "x.png"));
+  ok("main collectShadows excludes the overlay shadow", collectShadows(root, ID, NOSCROLL).length === 0);
+}
+// a non-finite zIndex is NOT treated as an overlay (validated)
+{
+  const n = placed(el("view", { style: { zIndex: Infinity, background: [1, 0, 1, 1] } }), 0, 0, 40, 40);
+  const root = placed(el("view", {}, n), 0, 0, 100, 100);
+  ok("Infinity zIndex is not an overlay", collectOverlays(root, null, ID, NOSCROLL).length === 0);
+  ok("Infinity zIndex stays in the main pass", collectRects(root, null, ID, NOSCROLL).some((r) => approxArr(r.color, [1, 0, 1, 1])));
 }
 
 process.exit(done("collect"));
