@@ -5,6 +5,13 @@ All notable changes to Kussetsu are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-06-22
+
+First DX pass since the initial release: declarative mount, typed authoring components,
+R3F-style hooks, percentage layout, a border primitive, and a hardened device-loss/resize
+runtime. **Backward compatible — no breaking changes** (lowercase `<view>`/`<text>` and
+zero-arg `onActivate` handlers still work).
+
 ### Added
 
 - **`border` / `borderColor` Style fields** — a hairline/outline stroke on the box edge that
