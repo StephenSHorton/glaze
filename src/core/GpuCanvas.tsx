@@ -51,6 +51,7 @@ export function GpuCanvas({
   background,
   debug,
   onDeviceLost,
+  onDeviceRestored,
   onError,
 }: GpuCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -87,9 +88,10 @@ export function GpuCanvas({
           background,
           debug,
           onDeviceLost: (info) => {
-            setFailed(true); // device lost → show the fallback ("rendering lost, reload")
+            setFailed(true); // recovery gave up → show the fallback ("rendering lost, reload")
             onDeviceLost?.(info);
           },
+          onDeviceRestored,
           onError,
         });
         if (cancelled) {

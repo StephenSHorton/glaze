@@ -7,6 +7,14 @@ All notable changes to Kussetsu are documented here. This project adheres to
 
 ### Added
 
+- **Automatic device-loss recovery.** When the WebGPU device is lost (GPU crash/reset, sleep/wake,
+  TDR) the renderer now re-acquires a device and rebuilds all GPU resources (pipelines, glyph atlas,
+  buffers, textures) **in place** and repaints — the React tree is untouched, so no reload and no
+  lost state. `onDeviceLost` now fires only if recovery **gives up** (with a backstop against a
+  loss→recover→loss loop); a new **`onDeviceRestored`** callback fires on successful in-place
+  recovery. (Browser-verified by forcing a device loss and confirming the scene repaints.)
+  (Road to 1.0 — Pillar 1)
+
 - **Headless-WebGPU smoke test** (`npm run test:browser`, `test/browser.test.mjs` + a `browser`
   CI workflow) — mounts the built demo in real (headless, software-WebGPU) Chromium and asserts
   the renderer comes up clean: a WebGPU adapter is present, a `<canvas>` mounts, the
